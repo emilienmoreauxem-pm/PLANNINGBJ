@@ -815,6 +815,7 @@ window._firebaseConfig = null; // sera remplacé par config.js si présent
       <div class="nav-dropdown" style="right:0;left:auto">
         <button class="tab" onclick="openMobileView()">📱 Vue mobile</button>
         <button class="tab" onclick="showEditorLog()">📋 Historique</button>
+        <button class="tab" onclick="openChangePassword()">🔑 Changer mon mot de passe</button>
         <button class="tab" onclick="clearSavedData()" style="color:#fca5a5">↺ Réinitialiser</button>
       </div>
     </div>
@@ -1469,6 +1470,7 @@ function saveData() {
       csuData: csuData,
       editorLogs: window._editorLogs || [],
       actionLog: window._actionLog || [],
+      customPwds: Object.fromEntries(Object.keys(EDITOR_CODES).map(k => [k, EDITOR_CODES[k].pwd])),
       savedAt: new Date().toISOString(),
       lastEditor: currentEditor ? (EDITOR_CODES[currentEditor]?.label || currentEditor) : undefined,
     };
@@ -1512,6 +1514,7 @@ function loadSavedData() {
     if (snap.prevVacations)   { prevVacations.length = 0; snap.prevVacations.forEach(v => prevVacations.push(v)); }
     if (snap.editorLogs)      { window._editorLogs = snap.editorLogs; }
     if (snap.actionLog)       { window._actionLog  = snap.actionLog; }
+    if (snap.customPwds)      { Object.keys(snap.customPwds).forEach(k => { if (EDITOR_CODES[k]) EDITOR_CODES[k].pwd = snap.customPwds[k]; }); }
     return true;
   } catch(e) {
     console.warn('Chargement sauvegarde échoué :', e);
@@ -3103,6 +3106,129 @@ const EDITOR_CODES = {
 };
 let editMode = false;
 let currentEditor = null;
+
+// Charger les mots de passe personnalisés depuis localStorage
+(function loadCustomPasswords() {
+  try {
+    const saved = localStorage.getItem('pm_custom_pwds');
+    if (saved) {
+      const custom = JSON.parse(saved);
+      Object.keys(custom).forEach(key => {
+        if (EDITOR_CODES[key]) EDITOR_CODES[key].pwd = custom[key];
+      });
+    }
+  } catch(e) {}
+})();
+
+function saveCustomPasswords() {
+  try {
+    const custom = {};
+    Object.keys(EDITOR_CODES).forEach(k => { custom[k] = EDITOR_CODES[k].pwd; });
+    localStorage.setItem('pm_custom_pwds', JSON.stringify(custom));
+    // Sauvegarder aussi dans Firebase via saveData
+    saveData();
+  } catch(e) {}
+}
+
+function openChangePassword() {
+  if (!editMode) { _showLoginRequired(); return; }
+
+  const isDirection = currentEditor === 'DIRECTION';
+  const editor = EDITOR_CODES[currentEditor];
+
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay open';
+  modal.style.cssText = 'z-index:10000';
+
+  // Direction : peut changer le mot de passe de n'importe qui
+  const targetSelect = isDirection
+    ? `<div class="form-group">
+        <label class="form-label">Compte à modifier</label>
+        <select id="pwd-target-select" class="form-select">
+          ${Object.entries(EDITOR_CODES).map(([k,v]) =>
+            `<option value="${k}" ${k===currentEditor?'selected':''}>${v.label}</option>`
+          ).join('')}
+        </select>
+       </div>`
+    : `<div style="font-size:13px;color:var(--text-2);margin-bottom:14px">
+        Modifier le mot de passe de <strong style="color:${editor.color}">${editor.label}</strong>
+       </div>`;
+
+  modal.innerHTML = `
+    <div class="modal" style="width:400px;max-width:95vw">
+      <div class="modal-title">
+        <span>🔑 Changer le mot de passe</span>
+        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">✕</button>
+      </div>
+      ${targetSelect}
+      ${!isDirection ? `<div class="form-group">
+        <label class="form-label">Mot de passe actuel</label>
+        <input type="password" id="pwd-current" class="form-input" placeholder="Mot de passe actuel…">
+       </div>` : ''}
+      <div class="form-group">
+        <label class="form-label">Nouveau mot de passe</label>
+        <input type="password" id="pwd-new" class="form-input" placeholder="Nouveau mot de passe…">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Confirmer le nouveau mot de passe</label>
+        <input type="password" id="pwd-confirm" class="form-input" placeholder="Confirmer…">
+      </div>
+      <div id="pwd-error" style="font-size:12px;color:var(--red);min-height:18px;margin-bottom:8px"></div>
+      <div class="btn-row">
+        <button class="btn-secondary" onclick="this.closest('.modal-overlay').remove()">Annuler</button>
+        <button class="btn-primary" onclick="submitChangePassword(${isDirection})">Enregistrer</button>
+      </div>
+    </div>`;
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+  setTimeout(() => {
+    const first = isDirection
+      ? document.getElementById('pwd-new')
+      : document.getElementById('pwd-current');
+    first?.focus();
+  }, 80);
+}
+
+function submitChangePassword(isDirection) {
+  const errEl  = document.getElementById('pwd-error');
+  const newPwd = document.getElementById('pwd-new')?.value?.trim();
+  const confPwd= document.getElementById('pwd-confirm')?.value?.trim();
+
+  // Déterminer la cible
+  const targetKey = isDirection
+    ? (document.getElementById('pwd-target-select')?.value || currentEditor)
+    : currentEditor;
+
+  // Vérification mdp actuel (non Direction)
+  if (!isDirection) {
+    const curPwd = document.getElementById('pwd-current')?.value?.trim();
+    if (curPwd !== EDITOR_CODES[currentEditor].pwd) {
+      errEl.textContent = '✕ Mot de passe actuel incorrect';
+      document.getElementById('pwd-current').value = '';
+      document.getElementById('pwd-current').focus();
+      return;
+    }
+  }
+
+  if (!newPwd) { errEl.textContent = '✕ Le nouveau mot de passe ne peut pas être vide'; return; }
+  if (newPwd.length < 6) { errEl.textContent = '✕ Minimum 6 caractères'; return; }
+  if (newPwd !== confPwd) { errEl.textContent = '✕ Les mots de passe ne correspondent pas'; document.getElementById('pwd-confirm').value=''; return; }
+
+  // Appliquer
+  EDITOR_CODES[targetKey].pwd = newPwd;
+  saveCustomPasswords();
+
+  const targetLabel = EDITOR_CODES[targetKey].label;
+  logAction('modif', `Mot de passe modifié — ${targetLabel}`, `Par : ${EDITOR_CODES[currentEditor].label}`);
+
+  document.querySelector('.modal-overlay')?.remove();
+  // Toast de confirmation
+  const toast = document.createElement('div');
+  toast.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:9999;background:var(--surface-2);border:1px solid rgba(16,185,129,.4);border-radius:var(--radius);padding:12px 18px;font-size:13px;color:#6ee7b7;box-shadow:0 8px 24px rgba(0,0,0,.4)';
+  toast.textContent = `✓ Mot de passe de ${targetLabel} modifié avec succès`;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
 
 function onSelectEditor(key) {
   const pwdInput  = document.getElementById('editPwdInput');
@@ -6030,8 +6156,9 @@ if (_hadSaved) {
     if (data.regularMissions) { d.regularMissions.length = 0;  data.regularMissions.forEach(m => d.regularMissions.push(m)); }
     if (data.postesData)      { Object.assign(d.postesData, data.postesData); }
     if (data.csuData)         { Object.assign(d.csuData, data.csuData); }
-    if (data.editorLogs)      { window._editorLogs = data.editorLogs; }
-    if (data.actionLog)       { window._actionLog  = data.actionLog; }
+    if (data.editorLogs)  { window._editorLogs = data.editorLogs; }
+    if (data.actionLog)   { window._actionLog  = data.actionLog; }
+    if (data.customPwds)  { Object.keys(data.customPwds).forEach(k => { if (EDITOR_CODES[k]) EDITOR_CODES[k].pwd = data.customPwds[k]; }); }
     if (data.prevVacations) {
       d.prevVacations.length = 0;
       data.prevVacations.forEach(v => d.prevVacations.push(v));
@@ -6091,6 +6218,7 @@ if (_hadSaved) {
         prevVacations:   JSON.parse(JSON.stringify(d.prevVacations || [])),
         editorLogs:      JSON.parse(JSON.stringify(window._editorLogs || [])),
         actionLog:       JSON.parse(JSON.stringify(window._actionLog  || [])),
+        customPwds:      Object.fromEntries(Object.keys(EDITOR_CODES).map(k => [k, EDITOR_CODES[k].pwd])),
         lastEditor:      currentEditor ? (EDITOR_CODES[currentEditor]?.label || currentEditor) : null,
         savedAt:         new Date().toISOString()
       });
