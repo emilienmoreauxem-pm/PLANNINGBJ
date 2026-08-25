@@ -1,0 +1,7 @@
+# Clés Firebase — NE JAMAIS VERSIONNER
+config.js
+
+# Fichiers système
+.DS_Store
+Thumbs.db
+desktop.ini
