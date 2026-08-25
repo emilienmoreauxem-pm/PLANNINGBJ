@@ -811,6 +811,7 @@ window._firebaseConfig = null; // sera remplacé par config.js si présent
         <div id="aujourdhui-date" style="font-size:12px;color:var(--text-2);margin-top:3px"></div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div id="vj-source"></div>
         <div class="stats-row" style="padding:0;gap:8px;grid-template-columns:repeat(4,auto)">
           <div class="stat-card blue"  style="padding:8px 14px;text-align:center"><div class="stat-value" id="stat-presents"  style="font-size:20px">0</div><div class="stat-label" style="margin:0">Agents</div></div>
           <div class="stat-card cyan"  style="padding:8px 14px;text-align:center"><div class="stat-value" id="stat-equipages" style="font-size:20px">0</div><div class="stat-label" style="margin:0">Équipages</div></div>
@@ -1553,14 +1554,39 @@ function renderDashboard() {
 }
 
 function renderVacationJour() {
-  const today = new Date();
+  const today    = new Date();
   const todayStr = today.toLocaleDateString('fr-FR', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+  const todayShort = today.toLocaleDateString('fr-FR');
+  const todayISO   = today.toISOString().split('T')[0];
   const dateEl = document.getElementById('aujourdhui-date');
   if (dateEl) dateEl.textContent = todayStr.charAt(0).toUpperCase() + todayStr.slice(1);
 
+  // Chercher la vacation enregistrée pour aujourd'hui dans prevVacations
+  const vacAujourdhui = (prevVacations || []).find(v => {
+    const d = v.dateStr || v.date || '';
+    if (d === todayShort) return true;
+    if (d === todayISO)   return true;
+    const p = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (p) return `${p[3]}-${p[2].padStart(2,'0')}-${p[1].padStart(2,'0')}` === todayISO;
+    return false;
+  });
+
+  const vjRoutes = vacAujourdhui?.routes || [];
+  const vjPostes = vacAujourdhui?.postes || { accueil:[], csu:[], chefposte:[] };
+
+  // Bandeau source
+  const sourceEl = document.getElementById('vj-source');
+  if (sourceEl) {
+    sourceEl.innerHTML = vacAujourdhui
+      ? `<span style="font-size:11px;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:#6ee7b7;padding:3px 12px;border-radius:5px">✓ Vacation enregistrée${vacAujourdhui.savedBy ? ' par ' + vacAujourdhui.savedBy : ''}</span>`
+      : `<span style="font-size:11px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);color:#fcd34d;padding:3px 12px;border-radius:5px">⚠ Aucune vacation enregistrée pour aujourd'hui — utilisez <b>Vacation préparée → 📅 Enregistrer dans le planning</b></span>`;
+  }
+
   // Équipages (lecture seule)
   const equipGrid = document.getElementById('vj-equip-grid');
-  if (equipGrid) equipGrid.innerHTML = routesData.map(r => {
+  if (equipGrid) equipGrid.innerHTML = !vjRoutes.length
+    ? '<div style="color:var(--text-2);font-size:13px;padding:16px 0">Aucun équipage enregistré pour aujourd\'hui.</div>'
+    : vjRoutes.map(r => {
     const pr = PAUSES_REPAS.find(p => p.id === r.repas);
     const roleB  = r.role     ? `<span class="badge badge-amber">${r.role}</span>` : '';
     const fourB  = r.fourriere ? `<span class="badge badge-amber">🚗 Fourrière</span>` : '';
@@ -1582,14 +1608,14 @@ function renderVacationJour() {
         ${(r.zones||[]).length ? `<div class="equip-meta">${(r.zones||[]).map(z=>`<span class="badge badge-cyan">${z}</span>`).join('')}</div>` : ''}
       </div>
     </div>`;
-  }).join('') || '<div style="color:var(--text-2);font-size:13px;padding:16px 0">Aucun équipage configuré</div>';
+  }).join('');
 
   // Stats
   const agentsPresents = new Set();
-  routesData.forEach(r => r.membres.forEach(m => { if (m.n) agentsPresents.add(m.n); }));
+  vjRoutes.forEach(r => (r.membres||[]).forEach(m => { if (m.n) agentsPresents.add(m.n); }));
   const setEl = (id, v) => { const e = document.getElementById(id); if(e) e.textContent = v; };
   setEl('stat-presents',  agentsPresents.size);
-  setEl('stat-equipages', routesData.filter(r => r.membres.length > 0).length);
+  setEl('stat-equipages', vjRoutes.filter(r => (r.membres||[]).length > 0).length);
   setEl('stat-missions',  missions.length);
   setEl('stat-agents',    agents.length);
 
@@ -1602,7 +1628,7 @@ function renderVacationJour() {
       { key:'chefposte',  label:'⭐ Chef de Poste',  color:'#f87171' },
     ];
     postesEl.innerHTML = posteTypes.map(p => {
-      const list = postesData[p.key] || [];
+      const list = (vjPostes[p.key] || []).filter(e => e.nom);
       if (!list.length) return '';
       const rows = list.map(e => `<div class="post-summary-row">
         <div class="post-agent-avatar" style="background:${p.color}22;color:${p.color}">${initials(e.nom||'?')}</div>
@@ -1621,7 +1647,7 @@ function renderVacationJour() {
   // Pauses repas
   const pausesEl = document.getElementById('vj-pauses');
   if (pausesEl) pausesEl.innerHTML = PAUSES_REPAS.map(pr => {
-    const assigned = routesData.filter(r => r.repas === pr.id);
+    const assigned = vjRoutes.filter(r => r.repas === pr.id);
     const badges = assigned.length ? assigned.map(r=>`<span class="badge badge-green">${r.id}</span>`).join(' ') : '<span class="badge badge-gray">—</span>';
     return `<tr><td><span class="badge ${pr.badge}">${pr.id}</span></td><td>${pr.midi}</td><td style="display:flex;gap:4px;flex-wrap:wrap">${badges}</td></tr>`;
   }).join('');
@@ -1629,7 +1655,8 @@ function renderVacationJour() {
   // Missions régulières
   const missionsEl = document.getElementById('vj-missions');
   if (missionsEl) {
-    const missObjs = missions.filter(m => regularMissions.includes(m.text));
+    const vjMissionsRef = vacAujourdhui?.missions || regularMissions;
+    const missObjs = missions.filter(m => vjMissionsRef.includes(m.text));
     missionsEl.innerHTML = missObjs.length
       ? missObjs.map(m => `<div style="padding:7px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm)">
           <div style="display:flex;align-items:flex-start;gap:8px">
