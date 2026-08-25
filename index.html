@@ -1109,7 +1109,13 @@ window._firebaseConfig = null; // sera remplacé par config.js si présent
   <div class="tab-content" id="tab-archives">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:20px 0 12px">
       <div class="section-title" style="padding:0;margin:0">Archives des vacations</div>
-      <button class="add-btn" style="background:rgba(245,158,11,0.15);border-color:rgba(245,158,11,0.4);color:#fcd34d" onclick="saveCurrentVacation()">💾 Archiver la vacation du jour</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="add-btn" style="background:rgba(245,158,11,0.15);border-color:rgba(245,158,11,0.4);color:#fcd34d" onclick="saveCurrentVacation()">💾 Archiver la vacation du jour</button>
+        <label class="add-btn" style="background:rgba(16,185,129,0.1);border-color:rgba(16,185,129,0.3);color:#6ee7b7;cursor:pointer">
+          📂 Importer un fichier JSON
+          <input type="file" accept=".json" style="display:none" onchange="importArchiveFromFile(this)">
+        </label>
+      </div>
     </div>
     <div id="archivesList" style="display:flex;flex-direction:column;gap:12px"></div>
   </div>
@@ -3326,6 +3332,87 @@ function exportArchive(idx) {
   link.download = `vacation_${a.date.replace(/\//g,'-')}_${a.shift.replace(/[^a-z0-9]/gi,'_')}.json`;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function importArchiveFromFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+
+      // Vérifier que c'est bien une archive valide
+      if (!data || typeof data !== 'object') throw new Error('Format invalide');
+
+      // Cas 1 : fichier exporté depuis le bouton "Exporter" → structure archive complète
+      // Cas 2 : fichier exporté depuis Firebase / sauvegarde complète → structure planning
+      let archive = null;
+
+      if (data.routesData && data.missions && data.agents) {
+        // Format sauvegarde complète (Firebase export ou localStorage)
+        archive = {
+          date:           data.savedAt ? new Date(data.savedAt).toLocaleDateString('fr-FR') : new Date().toLocaleDateString('fr-FR'),
+          shift:          '—',
+          savedAt:        data.savedAt ? new Date(data.savedAt).toLocaleString('fr-FR') : new Date().toLocaleString('fr-FR'),
+          personnel:      data.agents || [],
+          routesData:     data.routesData || [],
+          missions:       data.missions || [],
+          agents:         data.agents || [],
+          regularMissions:data.regularMissions || [],
+          postesData:     data.postesData || { accueil:[], csu:[], chefposte:[] },
+        };
+      } else if (data.routesData && data.savedAt) {
+        // Format archive standard (bouton Exporter)
+        archive = data;
+        // S'assurer que les champs requis existent
+        if (!archive.missions)        archive.missions = [];
+        if (!archive.agents)          archive.agents = [];
+        if (!archive.regularMissions) archive.regularMissions = [];
+        if (!archive.personnel)       archive.personnel = archive.agents || [];
+        if (!archive.postesData)      archive.postesData = { accueil:[], csu:[], chefposte:[] };
+      } else {
+        throw new Error('Structure JSON non reconnue. Vérifiez que c\'est bien un fichier exporté depuis l\'application.');
+      }
+
+      // Demander si restaurer immédiatement ou juste ajouter aux archives
+      const choice = confirm(
+        `Fichier "${file.name}" chargé avec succès.\n` +
+        `Date : ${archive.date}\n` +
+        `${archive.routesData.length} équipage(s) · ${archive.missions.length} mission(s)\n\n` +
+        `OK = Restaurer maintenant (remplace les données actuelles)\n` +
+        `Annuler = Ajouter aux archives seulement`
+      );
+
+      if (choice) {
+        // Restaurer immédiatement
+        routesData.length = 0;     archive.routesData.forEach(r => routesData.push(r));
+        missions.length = 0;       archive.missions.forEach(m => missions.push(m));
+        agents.length = 0;         archive.agents.forEach(a => agents.push(a));
+        regularMissions.length = 0; archive.regularMissions.forEach(m => regularMissions.push(m));
+        if (archive.postesData) Object.assign(postesData, archive.postesData);
+        renderVacationJour();
+        renderPrepVacation();
+        renderMissions();
+        renderAgents();
+        renderPersonnel();
+        renderRoutes();
+        saveData();
+        alert(`✅ Vacation du ${archive.date} restaurée avec succès.`);
+      } else {
+        // Ajouter aux archives seulement
+        archives.unshift(archive);
+        try { localStorage.setItem('pm_archives', JSON.stringify(archives)); } catch(ex) {}
+        renderArchives();
+        alert(`✅ Archive ajoutée. Vous pouvez la restaurer depuis la liste.`);
+      }
+    } catch(err) {
+      alert('❌ Erreur lors de la lecture du fichier :\n' + err.message);
+    }
+    // Reset input pour permettre de re-sélectionner le même fichier
+    input.value = '';
+  };
+  reader.readAsText(file);
 }
 
 function restoreArchive(idx) {
