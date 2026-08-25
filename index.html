@@ -774,6 +774,10 @@ window._firebaseConfig = null; // sera remplacé par config.js si présent
           onfocus="this.style.borderColor='var(--blue-accent)'"
           onblur="this.style.borderColor='var(--border)'"
           onkeydown="if(event.key==='Enter')submitLogin()">
+        <button id="editPwdToggle" class="hidden" type="button"
+          onclick="const i=document.getElementById('editPwdInput');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'👁':'🙈'"
+          style="background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--text-2);
+          padding:6px 8px;border-radius:8px;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif">👁</button>
         <!-- Bouton connexion -->
         <button id="editLoginBtn" onclick="submitLogin()" class="hidden"
           style="background:rgba(37,99,235,0.2);border:1px solid rgba(37,99,235,0.45);
@@ -3089,13 +3093,13 @@ function _showLoginRequired() {
 // ════════════════════════════════════════════
 // Modifier uniquement les valeurs "pwd" pour changer un mot de passe.
 const EDITOR_CODES = {
-  'ECHO1':     { label: 'Echo 1',    color: '#60a5fa', pwd: 'Mistral47!'   },
-  'ECHO2':     { label: 'Echo 2',    color: '#34d399', pwd: 'Balthazar#9'  },
-  'ECHO3':     { label: 'Echo 3',    color: '#f59e0b', pwd: 'Kraken@2026'  },
-  'ECHO4':     { label: 'Echo 4',    color: '#c084fc', pwd: 'Zephyr$13'    },
-  'ECHO5':     { label: 'Echo 5',    color: '#fb923c', pwd: 'Volcan!88'    },
-  'BJ':        { label: 'BJ',        color: '#67e8f9', pwd: 'Navire&55'    },
-  'DIRECTION': { label: 'Direction', color: '#fca5a5', pwd: 'Amiral*2026'  },
+  'ECHO1':     { label: 'Echo 1',    color: '#60a5fa', pwd: 'Mistral2026'    },
+  'ECHO2':     { label: 'Echo 2',    color: '#34d399', pwd: 'Balthazar2026'  },
+  'ECHO3':     { label: 'Echo 3',    color: '#f59e0b', pwd: 'Kraken2026'     },
+  'ECHO4':     { label: 'Echo 4',    color: '#c084fc', pwd: 'Zephyr2026'     },
+  'ECHO5':     { label: 'Echo 5',    color: '#fb923c', pwd: 'Volcan2026'     },
+  'BJ':        { label: 'BJ',        color: '#67e8f9', pwd: 'Navire2026'     },
+  'DIRECTION': { label: 'Direction', color: '#fca5a5', pwd: 'Amiral2026'     },
 };
 let editMode = false;
 let currentEditor = null;
@@ -3118,6 +3122,7 @@ function onSelectEditor(key) {
     pwdInput.classList.add('hidden');
     loginBtn.classList.add('hidden');
     logoutBtn.classList.add('hidden');
+    document.getElementById('editPwdToggle')?.classList.add('hidden');
     status.textContent = '';
     return;
   }
@@ -3127,6 +3132,7 @@ function onSelectEditor(key) {
   pwdInput.classList.remove('hidden');
   loginBtn.classList.remove('hidden');
   logoutBtn.classList.add('hidden');
+  document.getElementById('editPwdToggle')?.classList.remove('hidden');
   status.textContent = '';
   setTimeout(() => pwdInput.focus(), 50);
 }
@@ -3160,6 +3166,7 @@ function submitLogin() {
   document.querySelectorAll('.editable').forEach(el => el.contentEditable = true);
 
   pwdInput.classList.add('hidden');
+  document.getElementById('editPwdToggle')?.classList.add('hidden');
   document.getElementById('editLoginBtn').classList.add('hidden');
   document.getElementById('editLogoutBtn').classList.remove('hidden');
   status.innerHTML = `<span style="color:${editor.color};font-weight:600">✓ ${editor.label}</span>`;
@@ -5958,4 +5965,371 @@ function doPrint() {
 }
 
 // ════════════════════════════════════════════
-//  EXPOSITI
+//  EXPOSITION DES DONNÉES & RENDU
+// ════════════════════════════════════════════
+
+window._appData = { routesData, missions, agents, regularMissions, postesData, csuData, prevVacations };
+window._appRender = function() {
+  renderDashboard();
+  renderEquipagesTab();
+  renderPersonnel();
+  renderVacationJour();
+  renderMissions();
+  renderRoutes();
+  renderAgents();
+  renderAllPosteTabs();
+  renderCsuRoadmap();
+  renderPrevCalendar();
+  renderPrevDayContainer();
+};
+
+const _hadSaved = loadSavedData();
+
+renderVacationJour();
+renderEquipagesTab();
+renderPersonnel();
+renderMissions();
+renderRoutes();
+renderAgents();
+renderArchives();
+renderAllPosteTabs();
+renderPrevCalendar();
+renderPrevDayContainer();
+renderCsuRoadmap();
+
+if (_hadSaved) {
+  const ind = document.getElementById('saveIndicator');
+  if (ind) { ind.style.opacity='1'; ind.textContent='↺ Planning restauré'; setTimeout(()=>{ind.style.opacity='0';ind.textContent='✓ Sauvegardé';}, 3000); }
+}
+
+// ════════════════════════════════════════════
+//  INITIALISATION FIREBASE (import dynamique)
+//  Déclenché ici, APRÈS que _appData est prêt.
+//  L'import dynamique est asynchrone mais son
+//  callback s'exécute dans une microtask — bien
+//  après que tout le JS synchrone est terminé,
+//  donc _appData et _appRender existent déjà.
+// ════════════════════════════════════════════
+(async function initFirebase() {
+
+  // ── log console uniquement ──────────────────────────────────
+  function _log(msg) { console.log('[Firebase]', msg); }
+
+  // ── helpers disponibles immédiatement ──────────────────────
+  function _showFbStatus(msg, color) {
+    const el = document.getElementById('firebaseStatus');
+    if (el) { el.textContent = msg; el.style.color = color; }
+  }
+
+  function _applyData(data) {
+    const d = window._appData;
+    if (!d) return;
+    if (data.routesData)      { d.routesData.length = 0;      data.routesData.forEach(r => d.routesData.push(r)); }
+    if (data.missions)        { d.missions.length = 0;         data.missions.forEach(m => d.missions.push(m)); }
+    if (data.agents)          { d.agents.length = 0;           data.agents.forEach(a => d.agents.push(a)); }
+    if (data.regularMissions) { d.regularMissions.length = 0;  data.regularMissions.forEach(m => d.regularMissions.push(m)); }
+    if (data.postesData)      { Object.assign(d.postesData, data.postesData); }
+    if (data.csuData)         { Object.assign(d.csuData, data.csuData); }
+    if (data.editorLogs)      { window._editorLogs = data.editorLogs; }
+    if (data.actionLog)       { window._actionLog  = data.actionLog; }
+    if (data.prevVacations) {
+      d.prevVacations.length = 0;
+      data.prevVacations.forEach(v => d.prevVacations.push(v));
+      // Si aucune date sélectionnée, prendre la première vacation dispo
+      // pour que renderPrevDayContainer() affiche bien le contenu
+      if (!prevSelectedDate && d.prevVacations.length > 0) {
+        prevSelectedDate = d.prevVacations[0].dateStr;
+      } else if (prevSelectedDate) {
+        // La date est déjà sélectionnée — le rendu va rafraîchir le contenu
+      }
+    }
+    // Mettre à jour le localStorage avec les données Firebase
+    // pour que le prochain rechargement parte des bonnes données
+    try {
+      localStorage.setItem('pm_planning_v1', JSON.stringify({
+        routesData: data.routesData || d.routesData,
+        missions: data.missions || d.missions,
+        agents: data.agents || d.agents,
+        regularMissions: data.regularMissions || d.regularMissions,
+        postesData: data.postesData || d.postesData,
+        csuData: data.csuData || d.csuData,
+        prevVacations: data.prevVacations || d.prevVacations,
+        savedAt: data.savedAt || new Date().toISOString()
+      }));
+    } catch(e) {}
+  }
+
+  const cfg = window._firebaseConfig;
+
+  // ── mode hors-ligne ─────────────────────────────────────────
+  if (!cfg || cfg.apiKey === 'VOTRE_API_KEY') {
+    _showFbStatus('🔒 Mode local', 'var(--text-muted)');
+    window._firebaseSaveDebounced = function() { showSaveIndicator(); };
+    window._firebaseSaveNow = async function() {};
+    return;
+  }
+
+  const DOC_PATH = 'planning/journalier';
+  let _db = null;
+  let _saveTimeout = null;
+  let _skipNext = false;
+
+  // ── sauvegarde Firestore ─────────────────────────────────────
+  async function _saveNow() {
+    if (!_db) return;
+    try {
+      _skipNext = true;
+      const d = window._appData;
+      const { doc, setDoc } = window._fbFns;
+      await setDoc(doc(_db, DOC_PATH), {
+        routesData:      JSON.parse(JSON.stringify(d.routesData)),
+        missions:        JSON.parse(JSON.stringify(d.missions)),
+        agents:          JSON.parse(JSON.stringify(d.agents)),
+        regularMissions: JSON.parse(JSON.stringify(d.regularMissions)),
+        postesData:      JSON.parse(JSON.stringify(d.postesData)),
+        csuData:         JSON.parse(JSON.stringify(d.csuData || {})),
+        prevVacations:   JSON.parse(JSON.stringify(d.prevVacations || [])),
+        editorLogs:      JSON.parse(JSON.stringify(window._editorLogs || [])),
+        actionLog:       JSON.parse(JSON.stringify(window._actionLog  || [])),
+        lastEditor:      currentEditor ? (EDITOR_CODES[currentEditor]?.label || currentEditor) : null,
+        savedAt:         new Date().toISOString()
+      });
+    } catch(e) {
+      _skipNext = false;
+      console.error('Firebase save error:', e);
+      _showFbStatus('⚠ Sauvegarde échouée', 'var(--red)');
+    }
+  }
+
+  // Exposer immédiatement (sera fonctionnel après l'init)
+  window._firebaseSaveNow = _saveNow;
+  window._firebaseSaveDebounced = function() {
+    clearTimeout(_saveTimeout);
+    _saveTimeout = setTimeout(async () => {
+      await _saveNow();
+      const ind = document.getElementById('saveIndicator');
+      if (ind) { ind.style.opacity='1'; ind.textContent='☁ Sauvegardé'; setTimeout(()=>{ ind.style.opacity='0'; }, 2000); }
+      _showFbStatus('☁ En ligne', 'var(--green)');
+    }, 800);
+  };
+
+  // ── chargement du SDK Firebase ───────────────────────────────
+  try {
+    _log('1. Démarrage initFirebase');
+    _showFbStatus('⏳ Connexion…', 'var(--text-muted)');
+
+    _log('2. Import SDK...');
+    const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js');
+    const { getFirestore, doc, getDoc, setDoc, onSnapshot } = await import('https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js');
+    _log('3. SDK importé');
+
+    window._fbFns = { doc, setDoc };
+
+    const app = initializeApp(cfg);
+    _db = getFirestore(app);
+    _log('4. Firestore initialisé — projet: ' + cfg.projectId);
+
+    // Écoute temps réel — mises à jour depuis un autre PC
+    onSnapshot(doc(_db, DOC_PATH), (snapshot) => {
+      if (!snapshot.exists()) { _log('snapshot: document vide'); return; }
+      if (_skipNext) { _skipNext = false; _log('snapshot: ignoré (proprio)'); return; }
+      _log('snapshot reçu: ' + JSON.stringify(Object.keys(snapshot.data())));
+      try {
+        _applyData(snapshot.data());
+        if (window._appRender) window._appRender();
+        // Forcer le re-rendu du détail de la section planning active
+        if (typeof renderPrevSection === 'function') renderPrevSection();
+        _showFbStatus('🔄 Mis à jour', 'var(--cyan)');
+        setTimeout(() => _showFbStatus('☁ En ligne', 'var(--green)'), 2000);
+      } catch(e) {
+        _log('ERREUR onSnapshot: ' + e.message);
+      }
+    }, (err) => {
+      _log('ERREUR listener: ' + err.message);
+    });
+
+    // Chargement initial depuis Firestore
+    _log('5. Lecture Firestore...');
+    const snap = await getDoc(doc(_db, DOC_PATH));
+    if (snap.exists()) {
+      _log('6. Document trouvé — clés: ' + JSON.stringify(Object.keys(snap.data())));
+      _applyData(snap.data());
+      if (window._appRender) window._appRender();
+      if (typeof renderPrevSection === 'function') renderPrevSection();
+      _showFbStatus('☁ En ligne', 'var(--green)');
+      _log('7. Données appliquées et rendu OK');
+    } else {
+      _log('6. Document absent → écriture initiale');
+      await _saveNow();
+      _showFbStatus('☁ Initialisé', 'var(--green)');
+      _log('7. Écriture initiale OK');
+    }
+
+  } catch(e) {
+    console.error('Firebase init error:', e);
+    _log('ERREUR FATALE: ' + e.message);
+    _showFbStatus('⚠ Hors ligne', 'var(--amber)');
+  }
+})();
+</script>
+
+<!-- Edit Route Modal -->
+<div class="modal-overlay" id="modalEditRoute">
+  <div class="modal" style="width:680px">
+    <div class="modal-title">
+      <span>Feuille de route — <span id="re-id" style="color:var(--cyan)"></span></span>
+      <button class="modal-close" onclick="closeModal('modalEditRoute')">✕</button>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs-modal">
+      <button class="tab-modal-btn active" onclick="switchModalTab('tab-infos', this)">📋 Infos générales</button>
+      <button class="tab-modal-btn" onclick="switchModalTab('tab-agents-edit', this)">👥 Agents</button>
+      <button class="tab-modal-btn" onclick="switchModalTab('tab-missions-reg', this)">📌 Missions régulières</button>
+      <button class="tab-modal-btn" onclick="switchModalTab('tab-missions-spec-tab', this)">⚡ Missions spécifiques</button>
+      <button class="tab-modal-btn" onclick="switchModalTab('tab-consignes-tab', this)">📝 Consignes</button>
+    </div>
+
+    <!-- Tab: Infos générales -->
+    <div class="tab-modal-section active" id="tab-infos">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Identifiant équipage</label>
+          <input class="form-input" type="text" id="re-equip-id" placeholder="ex: TV 385, VTT, ILOTS...">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Date du service</label>
+          <input class="form-input" type="date" id="re-date">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Pause repas</label>
+          <select class="form-select" id="re-repas">
+            <option value="—">— Aucune pause assignée</option>
+            <option value="PR 1">PR 1 — 12h45 / 13h30</option>
+            <option value="PR 2">PR 2 — 13h30 / 14h15</option>
+            <option value="PR 3">PR 3 — 14h15 / 15h00</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Rôle équipage</label>
+          <select class="form-select" id="re-role">
+            <option value="">— Aucun rôle</option>
+            <option value="PAM">PAM — Premier à l'armement</option>
+            <option value="DAM">DAM — Dernier au désarmement</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" style="display:flex;align-items:center;gap:10px">
+          <span>Équipage Fourrière</span>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:400;text-transform:none;letter-spacing:0;font-size:12px;color:var(--text-secondary)">
+            <input type="checkbox" id="re-fourriere" style="width:16px;height:16px;accent-color:var(--amber)"> Désigner cet équipage comme équipage de fourrière
+          </label>
+        </label>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Zones d'attribution <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;color:var(--text-muted)">(maintenir Ctrl pour sélection multiple)</span></label>
+        <select class="form-select" id="re-zones" multiple style="min-height:120px">
+          <option value="Jatte">Jatte</option>
+          <option value="Saussaye">Saussaye</option>
+          <option value="Boud Bineau">Boud Bineau</option>
+          <option value="Duc d'Orléans">Duc d'Orléans</option>
+          <option value="Gouraud">Gouraud</option>
+          <option value="Peronnet-Chézy">Peronnet-Chézy</option>
+          <option value="Borghèse-Hugo">Borghèse-Hugo</option>
+          <option value="Peretti">Peretti</option>
+          <option value="Dulud-Laffitte">Dulud-Laffitte</option>
+          <option value="Les Sablons">Les Sablons</option>
+          <option value="Longchamp">Longchamp</option>
+          <option value="Bagatelle">Bagatelle</option>
+          <option value="Centre-Ville">Centre-Ville</option>
+          <option value="Secteur Bagatelle">Secteur Bagatelle</option>
+          <option value="Fourrière">Fourrière</option>
+          <option value="Île de la Jatte">Île de la Jatte</option>
+          <option value="Pont de Neuilly">Pont de Neuilly</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Tab: Agents -->
+    <div class="tab-modal-section" id="tab-agents-edit">
+      <!-- Planning XLSX upload section -->
+      <div style="background:rgba(6,182,212,0.06);border:1px solid rgba(6,182,212,0.2);border-radius:10px;padding:12px 14px;margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+          <span style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:600">📅 Disponibilités depuis le planning</span>
+          <a href="https://villeneuillysurseine.sharepoint.com/:x:/s/POLICEMUNICIPALE-ENCADRANTSPOLICEMUNICIPALE/IQBFqCB_5ZI2S4rfD3u1TQzqAaONnybQ3ZYMjeUw-UjFPlU?e=khjIGX" target="_blank"
+            style="font-size:11px;color:var(--cyan);text-decoration:none;background:rgba(6,182,212,0.1);border:1px solid rgba(6,182,212,0.25);padding:3px 10px;border-radius:5px">
+            🔗 Ouvrir PLANNING PM BJ 2026.xlsx
+          </a>
+        </div>
+
+        <!-- Upload -->
+        <div style="margin-bottom:10px">
+          <label style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <span style="font-size:12px;color:var(--text-secondary)">Charger le fichier Excel :</span>
+            <label style="cursor:pointer;background:rgba(37,99,235,0.12);border:1px dashed rgba(37,99,235,0.45);color:#93c5fd;padding:6px 16px;border-radius:7px;font-size:12px;font-family:'Inter',sans-serif;transition:all .15s"
+              onmouseover="this.style.background='rgba(37,99,235,0.22)'" onmouseout="this.style.background='rgba(37,99,235,0.12)'">
+              📂 Choisir le .xlsx
+              <input type="file" accept=".xlsx,.xls" style="display:none" onchange="loadPlanningXlsx(this)">
+            </label>
+            <span id="xlsx-filename" style="font-size:11px;color:var(--text-muted);font-family:'DM Mono',monospace"></span>
+          </label>
+          <div id="xlsx-status" style="font-size:11px;color:var(--text-muted);margin-top:6px"></div>
+        </div>
+
+        <!-- Date selector -->
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span style="font-size:12px;color:var(--text-secondary)">Date du service :</span>
+          <input type="date" id="planning-date-filter"
+            style="background:rgba(0,0,0,0.4);border:1px solid rgba(6,182,212,0.3);color:var(--text-primary);padding:5px 10px;border-radius:7px;font-size:12px;font-family:'Inter',sans-serif;outline:none"
+            oninput="updatePlanningDateFilter(this.value)">
+          <span id="planning-availability-info" style="font-size:11px;color:var(--text-muted)">Charger le fichier Excel pour voir les disponibilités</span>
+        </div>
+        <div id="planning-available-agents" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" style="display:flex;align-items:center;justify-content:space-between">
+          Membres de l'équipage
+          <button class="add-btn" style="font-size:11px;padding:4px 10px" onclick="addMembreToRoute()">+ Ajouter un agent</button>
+        </label>
+        <div id="re-membres-list" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <!-- Tab: Missions régulières -->
+    <div class="tab-modal-section" id="tab-missions-reg">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <span style="font-size:12px;color:var(--text-muted)">Sélectionnez les missions depuis la base — s'appliquent à toutes les feuilles de route</span>
+        <button class="add-btn" style="font-size:11px;padding:4px 10px" onclick="addFreeRegMission()">+ Mission libre</button>
+      </div>
+      <div id="re-missions-reg-list"></div>
+    </div>
+
+    <!-- Tab: Missions spécifiques -->
+    <div class="tab-modal-section" id="tab-missions-spec-tab">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <span style="font-size:12px;color:var(--text-muted)">Missions propres à cet équipage ce jour</span>
+        <button class="add-btn" style="font-size:11px;padding:4px 10px" onclick="addSpecMissionRow()">+ Ajouter</button>
+      </div>
+      <div id="re-missions-spec-list"></div>
+    </div>
+
+    <!-- Tab: Consignes -->
+    <div class="tab-modal-section" id="tab-consignes-tab">
+      <div class="form-group">
+        <label class="form-label">Consignes spécifiques</label>
+        <textarea class="form-textarea" id="re-consignes" style="min-height:140px" placeholder="Consignes particulières pour cet équipage..."></textarea>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-secondary" onclick="closeModal('modalEditRoute')">Annuler</button>
+      <button class="btn-primary" onclick="saveEditRoute()">💾 Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
