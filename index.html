@@ -938,21 +938,22 @@ window._firebaseConfig = null; // sera remplacé par config.js si présent
   <div class="tab-content" id="tab-impression">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:16px 0 12px">
       <div>
-        <div class="section-title" style="padding:0;margin:0">🖨 Impression — Vue d'ensemble</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-top:4px">Aperçu avant impression de la vue journalière complète</div>
+        <div class="section-title" style="padding:0;margin:0">🖨 Impression — Vacation du jour</div>
+        <div style="font-size:12px;color:var(--text-2);margin-top:4px">Données de la vacation enregistrée pour aujourd'hui</div>
       </div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer">
-          <input type="checkbox" id="print-show-missions" checked style="accent-color:var(--cyan)"> Missions régulières
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2);cursor:pointer">
+          <input type="checkbox" id="print-show-missions" checked style="accent-color:var(--cyan)"> Missions
         </label>
-        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2);cursor:pointer">
           <input type="checkbox" id="print-show-postes" checked style="accent-color:var(--cyan)"> Postes fixes
         </label>
-        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2);cursor:pointer">
           <input type="checkbox" id="print-show-pauses" checked style="accent-color:var(--cyan)"> Pauses repas
         </label>
-        <button onclick="buildPrintPreview()" style="background:rgba(6,182,212,0.12);border:1px solid rgba(6,182,212,0.35);color:#67e8f9;padding:7px 16px;border-radius:8px;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif">↺ Actualiser</button>
-        <button onclick="doPrint()" style="background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.4);color:#fbbf24;padding:7px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;display:flex;align-items:center;gap:7px">🖨 Imprimer</button>
+        <button onclick="buildPrintPreview()" style="background:rgba(6,182,212,0.12);border:1px solid rgba(6,182,212,0.35);color:#67e8f9;padding:6px 14px;border-radius:var(--radius-sm);font-size:12px;cursor:pointer;font-family:'Inter',sans-serif">↺ Actualiser</button>
+        <button onclick="doPrint()" style="background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.4);color:#fbbf24;padding:6px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif">🖨 Vue d'ensemble</button>
+        <button onclick="printTodayAllRoutes()" style="background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;padding:6px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif">🖨 Toutes les feuilles</button>
       </div>
     </div>
 
@@ -1717,24 +1718,17 @@ function onPrepDateChange(dateVal) {
   });
 
   if (existing) {
-    // Charger la vacation existante dans routesData
-    const load = confirm(
-      `Une vacation existe pour le ${dateFormatted}.\n\nCharger cette vacation pour la modifier ?\n\nOK = Charger\nAnnuler = Garder le brouillon actuel`
-    );
-    if (load) {
-      routesData.length = 0;
-      (existing.routes || []).forEach(r => routesData.push(JSON.parse(JSON.stringify(r))));
-      if (existing.postes) Object.assign(postesData, JSON.parse(JSON.stringify(existing.postes)));
-      if (existing.missions && existing.missions.length) {
-        regularMissions.length = 0;
-        existing.missions.forEach(m => regularMissions.push(m));
-      }
-      if (statusEl) statusEl.innerHTML = `<span style="color:#6ee7b7">✓ Vacation du ${dateFormatted} chargée</span>`;
-    } else {
-      if (statusEl) statusEl.innerHTML = `<span style="color:#fcd34d">Brouillon actuel conservé · vacation existante non chargée</span>`;
+    // Charger silencieusement la vacation existante
+    routesData.length = 0;
+    (existing.routes || []).forEach(r => routesData.push(JSON.parse(JSON.stringify(r))));
+    if (existing.postes) Object.assign(postesData, JSON.parse(JSON.stringify(existing.postes)));
+    if (existing.missions && existing.missions.length) {
+      regularMissions.length = 0;
+      existing.missions.forEach(m => regularMissions.push(m));
     }
+    if (statusEl) statusEl.innerHTML = `<span style="color:#6ee7b7">✓ Vacation du ${dateFormatted} chargée</span>`;
   } else {
-    if (statusEl) statusEl.innerHTML = `<span style="color:var(--text-3)">Nouvelle vacation pour le ${dateFormatted}</span>`;
+    if (statusEl) statusEl.innerHTML = `<span style="color:var(--text-3)">Nouvelle vacation — ${dateFormatted}</span>`;
   }
 
   renderPrepVacation();
@@ -5385,8 +5379,30 @@ function buildPrintPreview() {
   const showPostes   = document.getElementById('print-show-postes')?.checked ?? true;
   const showPauses   = document.getElementById('print-show-pauses')?.checked ?? true;
 
+  // Chercher la vacation enregistrée pour aujourd'hui
+  const todayShort = new Date().toLocaleDateString('fr-FR');
+  const todayISO   = new Date().toISOString().split('T')[0];
+  const vacAujourdhui = (prevVacations || []).find(v => {
+    const d = v.dateStr || v.date || '';
+    if (d === todayShort || d === todayISO) return true;
+    const p = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    return p ? `${p[3]}-${p[2].padStart(2,'0')}-${p[1].padStart(2,'0')}` === todayISO : false;
+  });
+
+  const vjRoutes = vacAujourdhui?.routes  || routesData;
+  const vjPostes = vacAujourdhui?.postes  || postesData;
+  const vjMissText = vacAujourdhui?.missions || regularMissions;
+
   const today = new Date().toLocaleDateString('fr-FR', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
   const shift = document.querySelector('.shift-badge')?.textContent?.trim() || '';
+
+  if (!vacAujourdhui) {
+    content.innerHTML = `<div style="text-align:center;padding:40px;color:#94a3b8;font-size:13px">
+      ⚠ Aucune vacation enregistrée pour aujourd'hui.<br>
+      <span style="font-size:12px">Allez dans <b>Vacation préparée</b> → sélectionnez la date d'aujourd'hui → <b>💾 Enregistrer</b></span>
+    </div>`;
+    return;
+  }
 
   // ── En-tête ──────────────────────────────────────────────
   let html = `
@@ -5405,10 +5421,11 @@ function buildPrintPreview() {
     </div>`;
 
   // ── Statistiques ─────────────────────────────────────────
-  const nbPresents  = document.getElementById('stat-presents')?.textContent || '0';
-  const nbEquipages = document.getElementById('stat-equipages')?.textContent || '0';
-  const nbMissions  = document.getElementById('stat-missions')?.textContent || '0';
-  const nbAgents    = document.getElementById('stat-agents')?.textContent || '0';
+  const _pres = new Set(); vjRoutes.forEach(r => (r.membres||[]).forEach(m => { if(m.n) _pres.add(m.n); }));
+  const nbPresents  = String(_pres.size);
+  const nbEquipages = String(vjRoutes.filter(r => (r.membres||[]).length > 0).length);
+  const nbMissions  = String(missions.filter(m => vjMissText.includes(m.text)).length);
+  const nbAgents    = String(agents.length);
 
   html += `
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px">
@@ -5427,9 +5444,9 @@ function buildPrintPreview() {
   html += `<div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#1e3a8a;margin-bottom:10px;display:flex;align-items:center;gap:8px"><span style="display:inline-block;width:3px;height:16px;background:#2563eb;border-radius:2px;flex-shrink:0"></span>Composition des équipages</div>`;
   html += `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-bottom:20px">`;
 
-  routesData.forEach(r => {
+  vjRoutes.forEach(r => {
     const pr = PAUSES_REPAS.find(p => p.id === r.repas);
-    const membres = r.membres.length
+    const membres = (r.membres||[]).length
       ? r.membres.map(m => {
           const isChef = m.n === r.chef;
           return `<div style="display:flex;align-items:center;gap:7px;padding:4px 0;border-bottom:1px solid #f1f5f9">
@@ -5470,7 +5487,7 @@ function buildPrintPreview() {
         <th style="padding:7px 12px;text-align:left;border:1px solid #e2e8f0;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#64748b">Équipages</th>
       </tr></thead><tbody>`;
     PAUSES_REPAS.forEach(pr => {
-      const assigned = routesData.filter(r => r.repas === pr.id).map(r=>r.id).join(', ') || '—';
+      const assigned = vjRoutes.filter(r => r.repas === pr.id).map(r=>r.id).join(', ') || '—';
       html += `<tr>
         <td style="padding:6px 12px;border:1px solid #e2e8f0;font-weight:600;color:#1e3a8a">${pr.id}</td>
         <td style="padding:6px 12px;border:1px solid #e2e8f0;font-family:monospace">${pr.midi}</td>
@@ -5487,12 +5504,12 @@ function buildPrintPreview() {
       { key:'csu', label:'📡 CSU', color:'#059669' },
       { key:'chefposte', label:'⭐ Chef de Poste', color:'#dc2626' },
     ];
-    const hasPostes = posteTypes.some(p => postesData[p.key]?.length);
+    const hasPostes = posteTypes.some(p => (vjPostes[p.key]||[]).length);
     if (hasPostes) {
       html += `<div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#1e3a8a;margin-bottom:10px;display:flex;align-items:center;gap:8px"><span style="display:inline-block;width:3px;height:16px;background:#2563eb;border-radius:2px;flex-shrink:0"></span>Postes fixes</div>`;
       html += `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-bottom:20px">`;
       posteTypes.forEach(p => {
-        const list = postesData[p.key] || [];
+        const list = vjPostes[p.key] || [];
         if (!list.length) return;
         const rows = list.map(e => `<div style="padding:4px 0;border-bottom:1px solid #f1f5f9;font-size:11px;display:flex;justify-content:space-between">
           <span style="font-weight:${e.chefSalle?'700':'400'};color:${e.chefSalle?p.color:'#334155'}">${e.nom||'—'}${e.chefSalle?' ★':''}</span>
@@ -5508,13 +5525,14 @@ function buildPrintPreview() {
   }
 
   // ── Missions régulières ───────────────────────────────────
-  if (showMissions && regularMissions.length) {
+  const vjMissObjs = missions.filter(m => vjMissText.includes(m.text));
+  if (showMissions && vjMissObjs.length) {
     html += `<div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#1e3a8a;margin-bottom:10px;display:flex;align-items:center;gap:8px"><span style="display:inline-block;width:3px;height:16px;background:#2563eb;border-radius:2px;flex-shrink:0"></span>Missions régulières</div>`;
     html += `<div style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:20px">`;
-    regularMissions.forEach((m, i) => {
+    vjMissObjs.forEach((m, i) => {
       html += `<div style="display:flex;gap:10px;padding:7px 14px;border-bottom:1px solid #f1f5f9;${i%2===0?'background:#fafafa':''}">
-        <span style="font-family:monospace;font-size:10px;color:#0891b2;background:#ecfeff;border:1px solid #a5f3fc;padding:1px 7px;border-radius:4px;flex-shrink:0;align-self:flex-start;margin-top:1px">${String(i+1).padStart(2,'0')}</span>
-        <span style="font-size:11px;color:#334155;line-height:1.5">${m}</span>
+        <span style="font-family:monospace;font-size:10px;color:#0891b2;background:#ecfeff;border:1px solid #a5f3fc;padding:1px 7px;border-radius:4px;flex-shrink:0;align-self:flex-start;margin-top:1px">${m.num}</span>
+        <span style="font-size:11px;color:#334155;line-height:1.5">${m.text}</span>
       </div>`;
     });
     html += `</div>`;
@@ -5767,11 +5785,4 @@ function printPrepOverview() {
     /* Equip cards */
     .equip-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:4px}
     .equip-card{border:1px solid #e2e8f0;border-radius:8px;overflow:hidden}
-    .equip-header{padding:7px 10px;background:#f8fafc;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;gap:4px}
-    .equip-id{font-weight:800;font-size:13px;color:#1e40af}
-    .equip-body{padding:8px 10px}
-    .agent-row{display:flex;align-items:center;gap:7px;padding:4px 0;border-bottom:1px solid #f1f5f9}
-    .agent-row:last-child{border-bottom:none}
-    .avatar{width:22px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;flex-shrink:0}
-    /* Badges */
-    .badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600}
+    .equip-header{padding:7px 10px;background:#f8fafc;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-con
