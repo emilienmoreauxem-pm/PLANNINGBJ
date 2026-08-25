@@ -612,11 +612,6 @@
     opacity: 0.65;
     background: transparent;
   }
-  /* Les éléments de connexion sont toujours accessibles */
-  #editIdSelect, #editPwdInput, #editLoginBtn, #editLogoutBtn, #editCodeStatus {
-    pointer-events: auto !important;
-    opacity: 1 !important;
-  }
   .flex-end { display: flex; justify-content: flex-end; }
   .mt8 { margin-top: 8px; }
   .count-info { font-size: 12px; color: var(--text-3); }
@@ -3107,8 +3102,8 @@ const EDITOR_CODES = {
 let editMode = false;
 let currentEditor = null;
 
-// Charger les mots de passe personnalisés depuis localStorage
-(function loadCustomPasswords() {
+// Charger les mots de passe personnalisés — s'exécute après EDITOR_CODES
+function loadCustomPasswords() {
   try {
     const saved = localStorage.getItem('pm_custom_pwds');
     if (saved) {
@@ -3117,8 +3112,9 @@ let currentEditor = null;
         if (EDITOR_CODES[key]) EDITOR_CODES[key].pwd = custom[key];
       });
     }
-  } catch(e) {}
-})();
+  } catch(e) { console.warn('loadCustomPasswords:', e); }
+}
+loadCustomPasswords();
 
 function saveCustomPasswords() {
   try {
@@ -3264,46 +3260,58 @@ function onSelectEditor(key) {
 }
 
 function submitLogin() {
-  const key    = document.getElementById('editIdSelect').value;
-  const pwd    = document.getElementById('editPwdInput').value;
-  const editor = EDITOR_CODES[key];
-  const status = document.getElementById('editCodeStatus');
-  const pwdInput = document.getElementById('editPwdInput');
+  const selEl    = document.getElementById('editIdSelect');
+  const pwdEl    = document.getElementById('editPwdInput');
+  const statusEl = document.getElementById('editCodeStatus');
 
-  if (!editor) { status.textContent = '✕ Identifiant requis'; status.style.color='var(--red)'; return; }
+  if (!selEl || !pwdEl) return;
+
+  const key  = selEl.value.trim();
+  const pwd  = pwdEl.value; // pas de trim — le mdp peut avoir des espaces intentionnels
+  const editor = EDITOR_CODES[key];
+
+  if (!key || !editor) {
+    statusEl.textContent = '✕ Sélectionnez un identifiant';
+    statusEl.style.color = 'var(--red)';
+    return;
+  }
 
   if (pwd !== editor.pwd) {
-    status.textContent = '✕ Mot de passe incorrect';
-    status.style.color = 'var(--red)';
-    pwdInput.style.borderColor = 'var(--red)';
-    pwdInput.value = '';
-    pwdInput.focus();
+    statusEl.textContent = '✕ Mot de passe incorrect';
+    statusEl.style.color = 'var(--red)';
+    pwdEl.style.borderColor = 'var(--red)';
+    pwdEl.value = '';
+    pwdEl.focus();
     setTimeout(() => {
-      status.textContent = '';
-      pwdInput.style.borderColor = 'var(--border)';
+      statusEl.textContent = '';
+      pwdEl.style.borderColor = 'var(--border)';
     }, 2500);
     return;
   }
 
-  // ✅ Succès
+  // ✅ Connexion réussie
   editMode = true;
   currentEditor = key;
   document.body.classList.add('edit-active');
   document.querySelectorAll('.editable').forEach(el => el.contentEditable = true);
 
-  pwdInput.classList.add('hidden');
+  // Masquer champ mdp + bouton connexion, afficher déconnexion
+  pwdEl.classList.add('hidden');
+  pwdEl.value = '';
   document.getElementById('editPwdToggle')?.classList.add('hidden');
   document.getElementById('editLoginBtn').classList.add('hidden');
   document.getElementById('editLogoutBtn').classList.remove('hidden');
-  status.innerHTML = `<span style="color:${editor.color};font-weight:600">✓ ${editor.label}</span>`;
 
-  const sel = document.getElementById('editIdSelect');
-  sel.style.borderColor = editor.color;
-  sel.style.color       = editor.color;
+  statusEl.innerHTML = `<span style="color:${editor.color};font-weight:600">✓ ${editor.label}</span>`;
+
+  selEl.style.borderColor = editor.color;
+  selEl.style.color       = editor.color;
 
   logEditorActivity(editor.label);
-  renderRoutes(); renderMissions(); renderPersonnel();
-  renderAgents(document.getElementById('agentSearch').value.toLowerCase());
+  renderRoutes();
+  renderMissions();
+  renderPersonnel();
+  renderAgents(document.getElementById('agentSearch')?.value?.toLowerCase() || '');
   renderVacationJour();
   renderPrepVacation();
 }
