@@ -1491,6 +1491,49 @@ function saveData() {
   }
   if (window._firebaseSaveDebounced) window._firebaseSaveDebounced();
   else showSaveIndicator();
+
+  // Enregistrement automatique dans le planning si connecté et date sélectionnée
+  if (editMode) _autoSaveToPlanning();
+}
+
+// Enregistrement automatique silencieux dans prevVacations
+let _autoSaveTimer = null;
+function _autoSaveToPlanning() {
+  clearTimeout(_autoSaveTimer);
+  _autoSaveTimer = setTimeout(() => {
+    const picker = document.getElementById('prep-date-picker');
+    const dateVal = picker?.value;
+    if (!dateVal || !editMode) return;
+
+    const [y, m, d] = dateVal.split('-');
+    const dateFormatted = `${d}/${m}/${y}`;
+
+    if (!prevVacations) window.prevVacations = [];
+
+    const snapshot = {
+      date:     dateFormatted,
+      routes:   JSON.parse(JSON.stringify(routesData)),
+      postes:   JSON.parse(JSON.stringify(postesData)),
+      missions: JSON.parse(JSON.stringify(regularMissions)),
+      savedAt:  new Date().toLocaleString('fr-FR'),
+      savedBy:  currentEditor ? (EDITOR_CODES[currentEditor]?.label || currentEditor) : '—',
+      auto:     true, // marque l'enregistrement automatique
+    };
+
+    const existingIdx = prevVacations.findIndex(v => v.date === dateFormatted);
+    if (existingIdx >= 0) {
+      prevVacations[existingIdx] = snapshot;
+    } else {
+      prevVacations.unshift(snapshot);
+    }
+
+    // Mise à jour indicator discret
+    const statusEl = document.getElementById('prep-date-status');
+    if (statusEl) {
+      const t = new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+      statusEl.innerHTML = `<span style="font-size:10px;color:var(--text-3)">● Auto-enregistré ${t}</span>`;
+    }
+  }, 1500); // 1.5s après la dernière modif
 }
 
 // ── Journal d'actions ────────────────────────────────────────
@@ -1925,7 +1968,6 @@ function savePrepToPlanning() {
   };
 
   if (existingIdx >= 0) {
-    if (!confirm(`Une vacation est déjà enregistrée pour le ${dateFormatted}.\nRemplacer ?`)) return;
     prevVacations[existingIdx] = snapshot;
   } else {
     if (!prevVacations) window.prevVacations = [];
@@ -5396,45 +5438,32 @@ function renderStats() {
   const periodDays = parseInt(document.getElementById('stats-period')?.value) || 0;
   const agentSearch = (document.getElementById('stats-agent-search')?.value || '').toLowerCase().trim();
 
-  // ── Collecter toutes les vacations sources ─────────────────
-  // 1. Vacation actuelle (routesData + postesData)
-  // 2. prevVacations (planning multi-jours)
-  // 3. Archives (archives[].routes si existant)
-
+  // ── Source unique : prevVacations (vacations enregistrées via 💾 Enregistrer)
+  // Dédoublonnage par date — garder la version la plus récente pour chaque date
+  const seenDates = new Set();
   const allVacations = [];
 
-  // Vacation actuelle
-  allVacations.push({
-    date: new Date().toLocaleDateString('fr-FR'),
-    routes: routesData,
-    postes: postesData,
-  });
-
-  // Planning multi-jours
   (prevVacations || []).forEach(v => {
+    const dateKey = v.dateStr || v.date || '';
+    if (seenDates.has(dateKey)) return; // ignorer les doublons
+    seenDates.add(dateKey);
     allVacations.push({
-      date: v.dateStr || v.date || '',
+      date:   dateKey,
       routes: v.routes || [],
-      postes: v.postes || { accueil:[], csu:[], chefposte:[] },
-    });
-  });
-
-  // Archives
-  (typeof archives !== 'undefined' ? archives : []).forEach(a => {
-    if (a.routes) allVacations.push({
-      date: a.savedAt || a.date || '',
-      routes: a.routes,
-      postes: a.postesData || { accueil:[], csu:[], chefposte:[] },
+      postes: v.postes  || { accueil:[], csu:[], chefposte:[] },
     });
   });
 
   // ── Filtre période ─────────────────────────────────────────
   const now = new Date();
   const filtered = periodDays > 0 ? allVacations.filter(v => {
-    if (!v.date) return true;
-    // Parser DD/MM/YYYY ou autre
+    if (!v.date) return false;
     const parts = v.date.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
-    if (!parts) return true;
+    if (!parts) {
+      // Format YYYY-MM-DD
+      const d = new Date(v.date + 'T12:00:00');
+      return !isNaN(d) && (now - d) / 86400000 <= periodDays;
+    }
     const d = new Date(+parts[3], +parts[2]-1, +parts[1]);
     return (now - d) / 86400000 <= periodDays;
   }) : allVacations;
@@ -5447,10 +5476,10 @@ function renderStats() {
     return statsMap[nom];
   };
 
-  const TYPE_TV      = id => /^TV\s*\d+/i.test(id) || /^\d{2,3}$/.test(id.trim());
-  const TYPE_VTT     = id => /^VTT$/i.test(id);
+  const TYPE_TV      = id => /^TV/i.test(id);
+  const TYPE_VTT     = id => /^VTT/i.test(id);
   const TYPE_SCOOTER = id => /^SCOOTER/i.test(id);
-  const TYPE_ILOTS   = id => /^ILOTS?$/i.test(id);
+  const TYPE_ILOTS   = id => /^ILOT/i.test(id);
 
   filtered.forEach(v => {
     // Routes
@@ -5489,17 +5518,17 @@ function renderStats() {
     agentList = agentList.filter(([nom]) => nom.toLowerCase().includes(agentSearch));
   }
 
-  // ── Résumé global ──────────────────────────────────────────
-  const totalVac = filtered.length;
-  const totalAgents = Object.keys(statsMap).length;
+  const nbDates  = filtered.length;
+  const nbAgentsDistincts = Object.keys(statsMap).length;
   const globalEl = document.getElementById('stats-global');
   if (globalEl) globalEl.innerHTML = [
-    { label:'Vacations analysées', val:totalVac,    color:'blue'  },
-    { label:'Agents distincts',    val:totalAgents, color:'cyan'  },
-    { label:'Sources de données',  val:`${filtered.length} planning${prevVacations?.length ? ` · ${prevVacations.length} planifié(s)` : ''}`, color:'amber', small:true },
+    { label:'Vacations analysées',  val: nbDates,           color:'blue'  },
+    { label:'Agents distincts',      val: nbAgentsDistincts, color:'cyan'  },
+    { label:'Vacations enregistrées',val: allVacations.length, color:'amber' },
+    { label:'Agents dans la base',   val: agents.length,     color:'green' },
   ].map(s => `<div class="stat-card ${s.color}" style="padding:10px 14px">
     <div class="stat-label">${s.label}</div>
-    <div class="${s.small ? '' : 'stat-value'}" style="${s.small ? 'font-size:13px;font-weight:600;color:var(--amber);margin-top:4px' : 'font-size:22px'}">${s.val}</div>
+    <div class="stat-value" style="font-size:22px">${s.val}</div>
   </div>`).join('');
 
   // ── Tableau ────────────────────────────────────────────────
