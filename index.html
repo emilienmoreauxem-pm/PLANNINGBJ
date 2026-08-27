@@ -2134,12 +2134,7 @@ function renderPrepPostes() {
   }).join('');
 }
 
-function addPostAgent(poste) {
-  if (!editMode) return;
-  if (!postesData[poste]) postesData[poste] = [];
-  postesData[poste].push({ nom: agents[0]?.nom || '', repas:'', chefSalle:false });
-  saveData(); renderPrepPostes();
-}
+// addPostAgent défini plus bas (version principale avec debounce)
 
 function renderDashboardEquip() { renderVacationJour(); }
 
@@ -4377,41 +4372,59 @@ function getAgentInitials(nom) {
   return (p[0][0] + (p[1] ? p[1][0] : '')).toUpperCase();
 }
 
+// Cache des options agents pour les postes (évite de rebuilder à chaque render)
+let _cachedPosteAgentOpts = '';
+let _cachedPosteAgentCount = 0;
+
+function _getPosteAgentOpts() {
+  if (agents.length !== _cachedPosteAgentCount) {
+    _cachedPosteAgentCount = agents.length;
+    _cachedPosteAgentOpts = agents.map(a =>
+      `<option value="${a.nom}">${a.nom}${a.prenom?' '+a.prenom:''} — mat.${a.mat||'—'}</option>`
+    ).join('');
+  }
+  return '<option value="">— Sélectionner —</option>' + _cachedPosteAgentOpts;
+}
+
+const _repasOpts = () => '<option value="">— Pause —</option>' +
+  PAUSES_REPAS.map(pr => `<option value="${pr.id}">${pr.id} — ${pr.midi}</option>`).join('');
+
 function renderPosteTab(poste) {
   const list = document.getElementById(poste + '-agents-list');
   if (!list) return;
   const cfg = POSTES_CONFIG[poste];
   const isCsu = poste === 'csu';
+  const agentOpts = _getPosteAgentOpts();
+  const repasOpts = _repasOpts();
 
   list.innerHTML = postesData[poste].map((entry, i) => {
-    const inits = getAgentInitials(entry.nom);
-    const agentOptsSelected = ['<option value="">— Sélectionner un agent —</option>',
-      ...agents.map(a => `<option value="${a.nom}" ${a.nom === entry.nom ? 'selected' : ''}>${a.nom}${a.prenom ? ' ' + a.prenom : ''} (mat. ${a.mat})</option>`)
-    ].join('');
-    const repasOptsSelected = ['<option value="">— Aucune pause —</option>',
-      ...PAUSES_REPAS.map(pr => `<option value="${pr.id}" ${pr.id === entry.repas ? 'selected' : ''}>${pr.id} — ${pr.midi}</option>`)
-    ].join('');
+    const inits = initials(entry.nom || '?');
     const chefSalleHtml = isCsu ? `
-      <label class="chef-salle-label ${entry.chefSalle ? 'active' : ''}" title="Désigner comme Chef de Salle CSU">
-        <input type="checkbox" ${entry.chefSalle ? 'checked' : ''} onchange="toggleChefSalle(${i},this.checked)"> ★ Chef de Salle
+      <label class="chef-salle-label ${entry.chefSalle?'active':''}" title="Chef de Salle CSU">
+        <input type="checkbox" ${entry.chefSalle?'checked':''} onchange="toggleChefSalle(${i},this.checked)"> ★ Chef
       </label>` : '';
     return `<div class="post-agent-row" id="post-row-${poste}-${i}">
-      <div class="post-agent-avatar" style="background:${cfg.color}22;color:${cfg.color};border-color:${cfg.color}55">${entry.chefSalle ? '★' : inits}</div>
-      <select class="post-select" onchange="updatePostAgent('${poste}',${i},'nom',this.value)">${agentOptsSelected}</select>
-      <select class="post-repas-select" onchange="updatePostAgent('${poste}',${i},'repas',this.value)" style="color:${cfg.color};border-color:${cfg.color}44;background:rgba(0,0,0,0.45)">${repasOptsSelected}</select>
+      <div class="post-agent-avatar" style="background:${cfg.color}22;color:${cfg.color}">${entry.chefSalle?'★':inits}</div>
+      <select class="post-select" onchange="updatePostAgent('${poste}',${i},'nom',this.value)">${agentOpts}</select>
+      <select class="post-repas-select" onchange="updatePostAgent('${poste}',${i},'repas',this.value)" style="color:${cfg.color};border-color:${cfg.color}44;background:rgba(0,0,0,0.45)">${repasOpts}</select>
       ${chefSalleHtml}
       <button class="post-remove-btn" onclick="removePostAgent('${poste}',${i})">✕</button>
     </div>`;
-  }).join('') || '<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:12px 0">Aucun agent affecté — cliquez sur Ajouter</div>';
+  }).join('') || '<div style="font-size:12px;color:var(--text-2);text-align:center;padding:12px 0">Aucun agent — cliquez Ajouter</div>';
+
+  // Appliquer les valeurs sélectionnées après insertion DOM
+  const selects = list.querySelectorAll('select');
+  postesData[poste].forEach((entry, i) => {
+    if (selects[i*2])   selects[i*2].value   = entry.nom   || '';
+    if (selects[i*2+1]) selects[i*2+1].value = entry.repas || '';
+  });
 }
 
 function toggleChefSalle(idx, checked) {
   if (!editMode) { alertLock(); return; }
-  // Un seul chef de salle à la fois — désactive les autres
   postesData.csu.forEach((e, i) => { e.chefSalle = (i === idx) ? checked : false; });
   renderPosteTab('csu');
-  renderDashboardPostes();
-  saveData();
+  _debounceSave();
 }
 
 function renderAllPosteTabs() {
@@ -4425,38 +4438,43 @@ function addPostAgent(poste) {
   if (!editMode) { alertLock(); return; }
   postesData[poste].push({ nom: '', repas: '', chefSalle: false });
   renderPosteTab(poste);
-  renderDashboardPostes();
-  saveData();
+  _debounceSave();
 }
 
 function removePostAgent(poste, idx) {
   if (!editMode) { alertLock(); return; }
   postesData[poste].splice(idx, 1);
   renderPosteTab(poste);
-  renderDashboardPostes();
-  saveData();
+  _debounceSave();
 }
 
 function updatePostAgent(poste, idx, field, value) {
   if (!editMode) { alertLock(); return; }
+  if (!postesData[poste][idx]) return;
   postesData[poste][idx][field] = value;
-  renderDashboardPostes();
-  saveData();
-  // Update avatar initials inline without full re-render
-  const list = document.getElementById(poste + '-agents-list');
-  if (list) {
-    const rows = list.querySelectorAll('.post-agent-row');
-    if (rows[idx]) {
-      const avatar = rows[idx].querySelector('.post-agent-avatar');
-      if (avatar && field === 'nom') {
-        avatar.textContent = postesData[poste][idx].chefSalle ? '★' : getAgentInitials(value);
-      }
+  // Mise à jour avatar inline sans re-render
+  if (field === 'nom') {
+    const list = document.getElementById(poste + '-agents-list');
+    if (list) {
+      const avatars = list.querySelectorAll('.post-agent-avatar');
+      if (avatars[idx]) avatars[idx].textContent = value ? initials(value) : '?';
     }
   }
+  _debounceSave();
+}
+
+// Debounce save — attend 800ms après la dernière modif avant de sauvegarder
+let _debounceTimer = null;
+function _debounceSave() {
+  clearTimeout(_debounceTimer);
+  _debounceTimer = setTimeout(() => {
+    saveData();
+    renderVacationJour();
+    renderPrepPostes();
+  }, 800);
 }
 
 function renderDashboardPostes() {
-  // Legacy: re-render vacation du jour postes
   renderVacationJour();
 }
 
@@ -6405,8 +6423,8 @@ if (_hadSaved) {
           <select class="form-select" id="re-repas">
             <option value="—">— Aucune pause assignée</option>
             <option value="PR 1">PR 1 — 12h00 / 12h45</option>
-            <option value="PR 2">PR 2 — 12h00 / 12h45</option>
-            <option value="PR 3">PR 3 — 12h45 / 13h30</option>
+            <option value="PR 2">PR 2 — 12h45 / 13h30</option>
+            <option value="PR 3">PR 3 — 13h30 / 14h15</option>
           </select>
         </div>
         <div class="form-group">
