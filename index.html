@@ -796,7 +796,7 @@ window._firebaseConfig = null; // sera remplacé par config.js si présent
   <!-- NAV TABS -->
   <nav id="mainNav">
     <button class="tab active" id="nav-aujourd-hui"  onclick="showTab('aujourd-hui')">☀ Vacation du jour</button>
-    <button class="tab"        id="nav-preparee"     onclick="showTab('preparee')">📋 Vacation préparée</button>
+    <button class="tab"        id="nav-preparee"     onclick="showTab('preparee')">📋 Création/Modification vacation</button>
     <button class="tab"        id="nav-planning"     onclick="showTab('planning')">📅 Planning</button>
     <div class="nav-sep"></div>
     <button class="tab"        id="nav-missions"     onclick="showTab('missions')">Missions</button>
@@ -824,6 +824,22 @@ window._firebaseConfig = null; // sera remplacé par config.js si présent
         <div id="aujourdhui-date" style="font-size:12px;color:var(--text-2);margin-top:3px"></div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <!-- Navigateur de date — visible uniquement si connecté -->
+        <div id="vj-date-nav" style="display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:4px 8px">
+          <button onclick="vjNavigateDay(-1)" title="Jour précédent"
+            style="background:none;border:none;color:var(--text-2);cursor:pointer;font-size:16px;padding:0 4px;line-height:1">‹</button>
+          <input type="date" id="vj-date-picker"
+            style="background:transparent;border:none;color:var(--text-1);font-size:12px;font-family:'Inter',sans-serif;outline:none;cursor:pointer"
+            oninput="vjLoadDate(this.value)">
+          <button onclick="vjNavigateDay(1)" title="Jour suivant"
+            style="background:none;border:none;color:var(--text-2);cursor:pointer;font-size:16px;padding:0 4px;line-height:1">›</button>
+        </div>
+        <button id="vj-today-btn" onclick="vjGoToday()"
+          style="background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.3);color:var(--cyan);
+          padding:6px 14px;border-radius:var(--radius-sm);font-size:12px;font-weight:600;
+          cursor:pointer;font-family:'Inter',sans-serif;white-space:nowrap">
+          ☀ Aujourd'hui
+        </button>
         <div id="vj-source"></div>
         <div class="stats-row" style="padding:0;gap:8px;grid-template-columns:repeat(4,auto)">
           <div class="stat-card blue"  style="padding:8px 14px;text-align:center"><div class="stat-value" id="stat-presents"  style="font-size:20px">0</div><div class="stat-label" style="margin:0">Agents</div></div>
@@ -857,7 +873,7 @@ window._firebaseConfig = null; // sera remplacé par config.js si présent
   <!-- ═══════════ VACATION PRÉPARÉE ═══════════ -->
   <div class="tab-content" id="tab-preparee">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:14px 0 10px">
-      <div class="section-title" style="padding:0;margin:0">📋 Vacation préparée</div>
+      <div class="section-title" style="padding:0;margin:0">📋 Création/Modification vacation</div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <label style="font-size:12px;color:var(--text-2)">Date :</label>
         <input type="date" id="prep-date-picker" style="background:var(--surface);border:1px solid var(--border);color:var(--text-1);padding:5px 10px;border-radius:var(--radius-sm);font-size:12px;font-family:'Inter',sans-serif;outline:none" oninput="onPrepDateChange(this.value)">
@@ -1222,9 +1238,9 @@ window._firebaseConfig = null; // sera remplacé par config.js si présent
         <label class="form-label">Pause repas</label>
         <select class="form-select" id="inp-pr">
           <option value="">—</option>
-          <option>PR 1 — 12h45/13h30</option>
-          <option>PR 2 — 13h30/14h15</option>
-          <option>PR 3 — 14h15/15h00</option>
+          <option>PR 1 — 12h00/12h45</option>
+          <option>PR 2 — 12h45/13h30</option>
+          <option>PR 3 — 13h30/14h15</option>
         </select>
       </div>
       <div class="form-group">
@@ -1358,18 +1374,18 @@ window._firebaseConfig = null; // sera remplacé par config.js si présent
 // ════════════════════════════════════════════
 
 let personnel = [
-  { nom:"SCALISE(Echo 5)", grade:"APM", mat:285, radio:73, tonfa:0, lacry:0, psa:"", equip:"TV 385", chef:true, attr:"Fourrière", pr:"PR 2 — 13h30/14h15", pam:true, dam:false, divers:"" },
-  { nom:"RONCEVIC", grade:"APM", mat:258, radio:15, tonfa:55, lacry:55, psa:"BKYL 925", equip:"TV 385", chef:false, attr:"", pr:"PR 2 — 13h30/14h15", pam:false, dam:false, divers:"" },
-  { nom:"PARIS", grade:"APM", mat:50, radio:23, tonfa:28, lacry:28, psa:"BLML 212", equip:"TV 385", chef:false, attr:"", pr:"PR 2 — 13h30/14h15", pam:false, dam:false, divers:"" },
-  { nom:"COLLARD", grade:"APM", mat:190, radio:41, tonfa:0, lacry:0, psa:"", equip:"TV 39", chef:true, attr:"Secteur Bagatelle", pr:"PR 2 — 13h30/14h15", pam:false, dam:true, divers:"08h-08h30 / 16h15-16h45 Maurois" },
-  { nom:"BOUZINOU", grade:"APM", mat:273, radio:43, tonfa:null, lacry:null, psa:"BLEK 682", equip:"TV 39", chef:false, attr:"", pr:"PR 2 — 13h30/14h15", pam:false, dam:false, divers:"" },
-  { nom:"ABSALON(Echo 1)", grade:"APM", mat:128, radio:9, tonfa:15, lacry:15, psa:"BKAK 869", equip:"TV 133", chef:true, attr:"", pr:"PR 3 — 14h15/15h00", pam:false, dam:false, divers:"07h30-09h op PM PARIS" },
-  { nom:"SIRIN", grade:"APM", mat:266, radio:84, tonfa:19, lacry:19, psa:"BKAK 868", equip:"TV 133", chef:false, attr:"", pr:"PR 3 — 14h15/15h00", pam:false, dam:false, divers:"" },
-  { nom:"PLANQUE", grade:"APM", mat:280, radio:85, tonfa:null, lacry:null, psa:"", equip:"TV 133", chef:false, attr:"", pr:"PR 3 — 14h15/15h00", pam:false, dam:false, divers:"" },
-  { nom:"ROCHE", grade:"APM", mat:183, radio:24, tonfa:36, lacry:36, psa:"BKYL 911", equip:"VTT", chef:true, attr:"Centre-Ville", pr:"PR 2 — 13h30/14h15", pam:false, dam:false, divers:"08h-10h pont de neuilly" },
-  { nom:"LORENT", grade:"APM", mat:282, radio:27, tonfa:0, lacry:0, psa:"", equip:"VTT", chef:false, attr:"", pr:"PR 2 — 13h30/14h15", pam:false, dam:false, divers:"" },
-  { nom:"LAURENCE", grade:"APM", mat:264, radio:40, tonfa:0, lacry:0, psa:"", equip:"ILOTS", chef:true, attr:"Centre-Ville", pr:"PR 3 — 14h15/15h00", pam:false, dam:false, divers:"" },
-  { nom:"LE GUELLEC", grade:"APM", mat:270, radio:13, tonfa:12, lacry:12, psa:"BLML 210", equip:"ILOTS", chef:false, attr:"", pr:"PR 3 — 14h15/15h00", pam:false, dam:false, divers:"" },
+  { nom:"SCALISE(Echo 5)", grade:"APM", mat:285, radio:73, tonfa:0, lacry:0, psa:"", equip:"TV 385", chef:true, attr:"Fourrière", pr:"PR 2 — 12h45/13h30", pam:true, dam:false, divers:"" },
+  { nom:"RONCEVIC", grade:"APM", mat:258, radio:15, tonfa:55, lacry:55, psa:"BKYL 925", equip:"TV 385", chef:false, attr:"", pr:"PR 2 — 12h45/13h30", pam:false, dam:false, divers:"" },
+  { nom:"PARIS", grade:"APM", mat:50, radio:23, tonfa:28, lacry:28, psa:"BLML 212", equip:"TV 385", chef:false, attr:"", pr:"PR 2 — 12h45/13h30", pam:false, dam:false, divers:"" },
+  { nom:"COLLARD", grade:"APM", mat:190, radio:41, tonfa:0, lacry:0, psa:"", equip:"TV 39", chef:true, attr:"Secteur Bagatelle", pr:"PR 2 — 12h45/13h30", pam:false, dam:true, divers:"08h-08h30 / 16h15-16h45 Maurois" },
+  { nom:"BOUZINOU", grade:"APM", mat:273, radio:43, tonfa:null, lacry:null, psa:"BLEK 682", equip:"TV 39", chef:false, attr:"", pr:"PR 2 — 12h45/13h30", pam:false, dam:false, divers:"" },
+  { nom:"ABSALON(Echo 1)", grade:"APM", mat:128, radio:9, tonfa:15, lacry:15, psa:"BKAK 869", equip:"TV 133", chef:true, attr:"", pr:"PR 3 — 13h30/14h15", pam:false, dam:false, divers:"07h30-09h op PM PARIS" },
+  { nom:"SIRIN", grade:"APM", mat:266, radio:84, tonfa:19, lacry:19, psa:"BKAK 868", equip:"TV 133", chef:false, attr:"", pr:"PR 3 — 13h30/14h15", pam:false, dam:false, divers:"" },
+  { nom:"PLANQUE", grade:"APM", mat:280, radio:85, tonfa:null, lacry:null, psa:"", equip:"TV 133", chef:false, attr:"", pr:"PR 3 — 13h30/14h15", pam:false, dam:false, divers:"" },
+  { nom:"ROCHE", grade:"APM", mat:183, radio:24, tonfa:36, lacry:36, psa:"BKYL 911", equip:"VTT", chef:true, attr:"Centre-Ville", pr:"PR 2 — 12h45/13h30", pam:false, dam:false, divers:"08h-10h pont de neuilly" },
+  { nom:"LORENT", grade:"APM", mat:282, radio:27, tonfa:0, lacry:0, psa:"", equip:"VTT", chef:false, attr:"", pr:"PR 2 — 12h45/13h30", pam:false, dam:false, divers:"" },
+  { nom:"LAURENCE", grade:"APM", mat:264, radio:40, tonfa:0, lacry:0, psa:"", equip:"ILOTS", chef:true, attr:"Centre-Ville", pr:"PR 3 — 13h30/14h15", pam:false, dam:false, divers:"" },
+  { nom:"LE GUELLEC", grade:"APM", mat:270, radio:13, tonfa:12, lacry:12, psa:"BLML 210", equip:"ILOTS", chef:false, attr:"", pr:"PR 3 — 13h30/14h15", pam:false, dam:false, divers:"" },
 ];
 
 let missions = [
@@ -1440,11 +1456,11 @@ let agents = [
 ];
 
 const equipages = [
-  { id:"TV 385", color:"blue", agents:["SCALISE(Echo 5)","RONCEVIC","PARIS"], chef:"SCALISE(Echo 5)", pr:"PR 2 — 13h30/14h15", attr:["Fourrière"], role:"PAM", cameras:"SCALISE(Echo 5)" },
-  { id:"TV 39",  color:"cyan", agents:["COLLARD","BOUZINOU"], chef:"COLLARD", pr:"PR 2 — 13h30/14h15", attr:["Secteur Bagatelle"], role:"DAM", cameras:"COLLARD" },
-  { id:"TV 133", color:"green", agents:["ABSALON(Echo 1)","SIRIN","PLANQUE"], chef:"ABSALON(Echo 1)", pr:"PR 3 — 14h15/15h00", attr:[], role:"", cameras:"ABSALON(Echo 1)" },
-  { id:"VTT",    color:"amber", agents:["ROCHE","LORENT"], chef:"ROCHE", pr:"PR 2 — 13h30/14h15", attr:["Centre-Ville","Ilots"], role:"", cameras:"ROCHE" },
-  { id:"ILOTS",  color:"amber", agents:["LAURENCE","LE GUELLEC"], chef:"LAURENCE", pr:"PR 3 — 14h15/15h00", attr:["Centre-Ville"], role:"", cameras:"" },
+  { id:"TV 385", color:"blue", agents:["SCALISE(Echo 5)","RONCEVIC","PARIS"], chef:"SCALISE(Echo 5)", pr:"PR 2 — 12h45/13h30", attr:["Fourrière"], role:"PAM", cameras:"SCALISE(Echo 5)" },
+  { id:"TV 39",  color:"cyan", agents:["COLLARD","BOUZINOU"], chef:"COLLARD", pr:"PR 2 — 12h45/13h30", attr:["Secteur Bagatelle"], role:"DAM", cameras:"COLLARD" },
+  { id:"TV 133", color:"green", agents:["ABSALON(Echo 1)","SIRIN","PLANQUE"], chef:"ABSALON(Echo 1)", pr:"PR 3 — 13h30/14h15", attr:[], role:"", cameras:"ABSALON(Echo 1)" },
+  { id:"VTT",    color:"amber", agents:["ROCHE","LORENT"], chef:"ROCHE", pr:"PR 2 — 12h45/13h30", attr:["Centre-Ville","Ilots"], role:"", cameras:"ROCHE" },
+  { id:"ILOTS",  color:"amber", agents:["LAURENCE","LE GUELLEC"], chef:"LAURENCE", pr:"PR 3 — 13h30/14h15", attr:["Centre-Ville"], role:"", cameras:"" },
   { id:"TV 703", color:"gray", agents:[], chef:"—", pr:"—", attr:[], role:"", cameras:"" },
 ];
 
@@ -1580,23 +1596,38 @@ function renderDashboard() {
   renderVacationJour();
 }
 
-function renderVacationJour() {
+function renderVacationJour(targetISO) {
   const today    = new Date();
-  const todayStr = today.toLocaleDateString('fr-FR', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
-  const todayShort = today.toLocaleDateString('fr-FR');
-  const todayISO   = today.toISOString().split('T')[0];
-  const dateEl = document.getElementById('aujourdhui-date');
-  if (dateEl) dateEl.textContent = todayStr.charAt(0).toUpperCase() + todayStr.slice(1);
+  const todayISO = today.toISOString().split('T')[0];
 
-  // Chercher la vacation enregistrée pour aujourd'hui dans prevVacations
+  // Non connecté → toujours aujourd'hui, navigateur masqué
+  const useISO = editMode ? (targetISO || todayISO) : todayISO;
+
+  const navEl     = document.getElementById('vj-date-nav');
+  const todayBtn  = document.getElementById('vj-today-btn');
+  if (navEl)    navEl.style.display    = editMode ? 'flex' : 'none';
+  if (todayBtn) todayBtn.style.display = editMode ? 'inline-block' : 'none';
+
+  // Synchro du date picker
+  const picker = document.getElementById('vj-date-picker');
+  if (picker) picker.value = useISO;
+
+  // Date affichée
+  const dateObj   = new Date(useISO + 'T12:00:00');
+  const dateLabel = dateObj.toLocaleDateString('fr-FR', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+  const todayShort = dateObj.toLocaleDateString('fr-FR'); // DD/MM/YYYY
+  const dateEl = document.getElementById('aujourdhui-date');
+  if (dateEl) dateEl.textContent = dateLabel.charAt(0).toUpperCase() + dateLabel.slice(1);
+
+  // Chercher la vacation enregistrée pour la date choisie
   const vacAujourdhui = (prevVacations || []).find(v => {
     const d = v.dateStr || v.date || '';
-    if (d === todayShort) return true;
-    if (d === todayISO)   return true;
+    if (d === todayShort || d === useISO) return true;
     const p = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    if (p) return `${p[3]}-${p[2].padStart(2,'0')}-${p[1].padStart(2,'0')}` === todayISO;
-    return false;
+    return p ? `${p[3]}-${p[2].padStart(2,'0')}-${p[1].padStart(2,'0')}` === useISO : false;
   });
+
+  const isToday = useISO === todayISO;
 
   const vjRoutes = vacAujourdhui?.routes || [];
   const vjPostes = vacAujourdhui?.postes || { accueil:[], csu:[], chefposte:[] };
@@ -1604,15 +1635,20 @@ function renderVacationJour() {
   // Bandeau source
   const sourceEl = document.getElementById('vj-source');
   if (sourceEl) {
-    sourceEl.innerHTML = vacAujourdhui
-      ? `<span style="font-size:11px;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:#6ee7b7;padding:3px 12px;border-radius:5px">✓ Vacation enregistrée${vacAujourdhui.savedBy ? ' par ' + vacAujourdhui.savedBy : ''}</span>`
-      : `<span style="font-size:11px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);color:#fcd34d;padding:3px 12px;border-radius:5px">⚠ Aucune vacation enregistrée pour aujourd'hui — utilisez <b>Vacation préparée → 📅 Enregistrer dans le planning</b></span>`;
+    if (vacAujourdhui) {
+      sourceEl.innerHTML = `<span style="font-size:11px;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:#6ee7b7;padding:3px 12px;border-radius:5px">✓ Vacation enregistrée${vacAujourdhui.savedBy ? ' · ' + vacAujourdhui.savedBy : ''}</span>`;
+    } else {
+      const msg = isToday
+        ? `⚠ Aucune vacation enregistrée pour aujourd'hui — allez dans <b>Création/Modification vacation → 💾 Enregistrer</b>`
+        : `⚠ Aucune vacation enregistrée pour cette date`;
+      sourceEl.innerHTML = `<span style="font-size:11px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);color:#fcd34d;padding:3px 12px;border-radius:5px">${msg}</span>`;
+    }
   }
 
   // Équipages (lecture seule)
   const equipGrid = document.getElementById('vj-equip-grid');
   if (equipGrid) equipGrid.innerHTML = !vjRoutes.length
-    ? '<div style="color:var(--text-2);font-size:13px;padding:16px 0">Aucun équipage enregistré pour aujourd\'hui.</div>'
+    ? `<div style="color:var(--text-2);font-size:13px;padding:16px 0">Aucun équipage enregistré pour cette date.</div>`
     : vjRoutes.map(r => {
     const pr = PAUSES_REPAS.find(p => p.id === r.repas);
     const roleB  = r.role     ? `<span class="badge badge-amber">${r.role}</span>` : '';
@@ -1857,7 +1893,7 @@ function addPrepRoute() {
   const picker = document.getElementById('prep-date-picker');
   const dateVal = picker?.value ? picker.value.split('-').reverse().join('/') : '';
   routesData.push({ id:'NOUVEAU', date:dateVal, chef:'—', membres:[], repas:'—', role:'', fourriere:false, zones:[], consignes:'', missionsSpec:[] });
-  logAction('ajout', 'Nouvelle feuille de route', 'Créée depuis vacation préparée');
+  logAction('ajout', 'Nouvelle feuille de route', 'Créée depuis création/modification vacation');
   saveData();
   // Ouvrir immédiatement la modale d'édition complète
   openEditRoute(routesData.length - 1);
@@ -1867,7 +1903,7 @@ function savePrepToPlanning() {
   if (!editMode) { alertLock(); return; }
   const picker = document.getElementById('prep-date-picker');
   const dateVal = picker?.value;
-  if (!dateVal) { alert('Sélectionnez une date pour la vacation préparée.'); return; }
+  if (!dateVal) { alert('Sélectionnez une date pour la création/modification vacation.'); return; }
 
   // Formater la date en DD/MM/YYYY
   const [y, m, d] = dateVal.split('-');
@@ -2106,6 +2142,24 @@ function addPostAgent(poste) {
 }
 
 function renderDashboardEquip() { renderVacationJour(); }
+
+function vjGoToday() {
+  renderVacationJour(new Date().toISOString().split('T')[0]);
+}
+
+function vjNavigateDay(delta) {
+  if (!editMode) return;
+  const picker = document.getElementById('vj-date-picker');
+  const current = picker?.value || new Date().toISOString().split('T')[0];
+  const d = new Date(current + 'T12:00:00');
+  d.setDate(d.getDate() + delta);
+  renderVacationJour(d.toISOString().split('T')[0]);
+}
+
+function vjLoadDate(iso) {
+  if (!editMode) return;
+  if (iso) renderVacationJour(iso);
+}
 
 function renderEquipagesTab() {
   document.getElementById('equipagesGrid').innerHTML = routesData.map(r => {
@@ -2373,9 +2427,9 @@ function deleteMission(idx) {
 
   // Pauses repas (données depuis le planning Excel officiel)
   const PAUSES_REPAS = [
-    { id:"PR 1", label:"PR 1 — 12h45/13h30", midi:"12h45 / 13h30", badge:"badge-blue"  },
-    { id:"PR 2", label:"PR 2 — 13h30/14h15", midi:"13h30 / 14h15", badge:"badge-cyan"  },
-    { id:"PR 3", label:"PR 3 — 14h15/15h00", midi:"14h15 / 15h00", badge:"badge-amber" },
+    { id:"PR 1", label:"PR 1 — 12h00/12h45", midi:"12h00 / 12h45", badge:"badge-blue"  },
+    { id:"PR 2", label:"PR 2 — 12h45/13h30", midi:"12h00 / 12h45", badge:"badge-cyan"  },
+    { id:"PR 3", label:"PR 3 — 13h30/14h15", midi:"12h45 / 13h30", badge:"badge-amber" },
   ];
 
 let routesData = [
@@ -3049,7 +3103,7 @@ function showTab(tabId) {
   if (el) el.classList.add('active');
   const btn = document.getElementById('nav-' + tabId);
   if (btn) btn.classList.add('active');
-  if (tabId === 'aujourd-hui') renderVacationJour();
+  if (tabId === 'aujourd-hui') renderVacationJour(document.getElementById('vj-date-picker')?.value || undefined);
   if (tabId === 'preparee')    renderPrepVacation();
   if (tabId === 'planning')    { if (typeof renderPrevCalendar === 'function') renderPrevCalendar(); }
   if (tabId === 'impression')  buildPrintPreview();
@@ -5555,7 +5609,7 @@ function buildPrintPreview() {
   if (!vacAujourdhui) {
     content.innerHTML = `<div style="text-align:center;padding:40px;color:#94a3b8;font-size:13px">
       ⚠ Aucune vacation enregistrée pour aujourd'hui.<br>
-      <span style="font-size:12px">Allez dans <b>Vacation préparée</b> → sélectionnez la date d'aujourd'hui → <b>💾 Enregistrer</b></span>
+      <span style="font-size:12px">Allez dans <b>Création/Modification vacation</b> → sélectionnez la date d'aujourd'hui → <b>💾 Enregistrer</b></span>
     </div>`;
     return;
   }
@@ -6026,7 +6080,7 @@ function printAllRoutes() {
   const picker = document.getElementById('prep-date-picker');
   const dateLabel = picker?.value
     ? new Date(picker.value + 'T12:00:00').toLocaleDateString('fr-FR', {weekday:'long',year:'numeric',month:'long',day:'numeric'})
-    : 'Vacation préparée';
+    : 'Création/Modification vacation';
 
   // Une page par feuille de route
   const html = routesData.map((r, i) =>
@@ -6343,9 +6397,9 @@ if (_hadSaved) {
           <label class="form-label">Pause repas</label>
           <select class="form-select" id="re-repas">
             <option value="—">— Aucune pause assignée</option>
-            <option value="PR 1">PR 1 — 12h45 / 13h30</option>
-            <option value="PR 2">PR 2 — 13h30 / 14h15</option>
-            <option value="PR 3">PR 3 — 14h15 / 15h00</option>
+            <option value="PR 1">PR 1 — 12h00 / 12h45</option>
+            <option value="PR 2">PR 2 — 12h00 / 12h45</option>
+            <option value="PR 3">PR 3 — 12h45 / 13h30</option>
           </select>
         </div>
         <div class="form-group">
