@@ -2498,7 +2498,7 @@ let routesData = [
         document.getElementById('planning-available-agents').innerHTML = '';
       }
     }
-    refreshEditMembres(planningDateInput?.value || '');
+    refreshEditMembres();
     refreshRegMissions();
     const specList = document.getElementById('re-missions-spec-list');
     specList.innerHTML = '';
@@ -2527,49 +2527,51 @@ let routesData = [
     saveData();
   }
 
-  function refreshEditMembres(dateVal) {
-    const r = routesData[editingRouteIdx];
-    const availableAgents = dateVal && planningAvailability[dateVal] ? planningAvailability[dateVal] : null;
-    const container = document.getElementById('re-membres-list');
+  // Options d'agents pré-compilées (reconstruites uniquement si la liste change)
+  let _cachedAgentOpts = '';
+  let _cachedAgentCount = 0;
 
-    // Build agent options, sorted by availability if we have planning data
-    let agentList = [...agents];
-    if (availableAgents) {
-      agentList.sort((a, b) => {
-        const aAvail = availableAgents.includes(a.nom) ? 0 : 1;
-        const bAvail = availableAgents.includes(b.nom) ? 0 : 1;
-        return aAvail - bAvail;
-      });
+  function _getAgentOpts(selectedNom) {
+    // Reconstruire seulement si le nombre d'agents a changé
+    if (agents.length !== _cachedAgentCount) {
+      _cachedAgentCount = agents.length;
+      _cachedAgentOpts = agents.map(a =>
+        `<option value="${a.nom}">${a.nom} — mat.${a.mat||'—'}</option>`
+      ).join('');
+    }
+    // Appliquer la sélection via JS après insertion (plus rapide que re-construire)
+    return '<option value="">— Sélectionner —</option>' + _cachedAgentOpts;
+  }
+
+  function refreshEditMembres() {
+    const r = routesData[editingRouteIdx];
+    const container = document.getElementById('re-membres-list');
+    if (!container) return;
+
+    if (!r.membres.length) {
+      container.innerHTML = '<div style="font-size:12px;color:var(--text-2);text-align:center;padding:16px">Aucun membre — cliquez « + Ajouter un agent »</div>';
+      return;
     }
 
     container.innerHTML = r.membres.map((m, i) => {
       const isChef = m.n === r.chef;
-      const isAvailable = availableAgents ? availableAgents.includes(m.n) : null;
-      const availBadge = isAvailable === true ? '<span style="font-size:10px;color:#6ee7b7;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.3);padding:1px 6px;border-radius:4px;margin-left:4px">✓ Présent</span>'
-        : isAvailable === false ? '<span style="font-size:10px;color:#fca5a5;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);padding:1px 6px;border-radius:4px;margin-left:4px">✗ Absent</span>'
-        : '';
-      const opts = ['<option value="">— Sélectionner —</option>',
-        ...agentList.map(a => {
-          const avail = availableAgents ? availableAgents.includes(a.nom) : null;
-          const label = `${a.nom} (mat. ${a.mat})${avail === true ? ' ✓' : avail === false ? ' ✗' : ''}`;
-          return `<option value="${a.nom}" ${a.nom === m.n ? 'selected' : ''}>${label}</option>`;
-        })
-      ].join('');
-      return `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;background:rgba(255,255,255,0.03);border-radius:8px;padding:8px;border:1px solid ${isAvailable===false?'rgba(239,68,68,0.2)':isAvailable===true?'rgba(16,185,129,0.2)':'transparent'}">
-        <div class="agent-avatar ${isChef ? 'avatar-amber' : 'avatar-blue'}" style="flex-shrink:0">${initials(m.n||'?')}</div>
-        <div style="flex:1;min-width:0">
-          <select class="form-select" style="width:100%;font-size:12px" onchange="updMembre(${i},this.value)">${opts}</select>
-          <div style="margin-top:4px">${availBadge}</div>
-        </div>
-        <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--amber);white-space:nowrap;cursor:pointer;padding:4px 8px;border-radius:5px;border:1px solid ${isChef ? 'rgba(245,158,11,0.4)' : 'transparent'};background:${isChef ? 'rgba(245,158,11,0.1)' : 'transparent'}">
-          <input type="radio" name="chef-radio" ${isChef ? 'checked' : ''} onchange="setChefIdx(${i})"> Chef
+      return `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;background:rgba(255,255,255,0.03);border-radius:8px;padding:7px 8px">
+        <div class="agent-avatar ${isChef ? 'avatar-amber' : 'avatar-blue'}" style="flex-shrink:0;width:28px;height:28px;font-size:10px">${initials(m.n||'?')}</div>
+        <select class="form-select" style="flex:1;font-size:12px" onchange="updMembre(${i},this.value)">
+          ${_getAgentOpts(m.n)}
+        </select>
+        <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--amber);white-space:nowrap;cursor:pointer;padding:3px 7px;border-radius:5px;border:1px solid ${isChef?'rgba(245,158,11,0.4)':'transparent'};background:${isChef?'rgba(245,158,11,0.1)':'transparent'}">
+          <input type="radio" name="chef-radio" ${isChef?'checked':''} onchange="setChefIdx(${i})"> Chef
         </label>
-        <button style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#fca5a5;cursor:pointer;font-size:13px;padding:4px 8px;border-radius:5px" onclick="removeMembre(${i})">✕</button>
+        <button style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#fca5a5;cursor:pointer;font-size:13px;padding:3px 7px;border-radius:5px" onclick="removeMembre(${i})">✕</button>
       </div>`;
     }).join('');
-    if (!r.membres.length) {
-      container.innerHTML = '<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:16px">Aucun membre — cliquez « Ajouter un agent »</div>';
-    }
+
+    // Appliquer les valeurs sélectionnées après insertion DOM
+    const selects = container.querySelectorAll('select');
+    r.membres.forEach((m, i) => {
+      if (selects[i] && m.n) selects[i].value = m.n;
+    });
   }
 
   function refreshRegMissions() {
@@ -2638,21 +2640,24 @@ let routesData = [
     const ag = agents.find(a => a.nom === nom);
     if (r.chef === r.membres[idx]?.n) r.chef = nom;
     r.membres[idx] = { n: nom, m: ag ? ag.mat : '' };
-    refreshEditMembres();
+    refreshEditMembres();  // re-rend seulement la liste dans la modale
   }
+
   function setChefIdx(idx) {
     const r = routesData[editingRouteIdx];
     r.chef = r.membres[idx]?.n || '—';
     refreshEditMembres();
   }
+
   function removeMembre(idx) {
     const r = routesData[editingRouteIdx];
     if (r.chef === r.membres[idx]?.n) r.chef = r.membres.find((_,i)=>i!==idx)?.n || '—';
     r.membres.splice(idx, 1);
     refreshEditMembres();
   }
+
   function addMembreToRoute() {
-    routesData[editingRouteIdx].membres.push({ n:'', m:'' });
+    routesData[editingRouteIdx].membres.push({ n: agents[0]?.nom || '', m: agents[0]?.mat || '' });
     refreshEditMembres();
   }
   function addSpecMissionRow(text) {
@@ -2693,7 +2698,7 @@ let routesData = [
       tagsEl.innerHTML = '';
     }
     // Refresh membres list to highlight available agents
-    refreshEditMembres(dateVal);
+    refreshEditMembres();
   }
 
   function quickAddAgentToRoute(nom) {
@@ -2702,7 +2707,7 @@ let routesData = [
     const ag = agents.find(a => a.nom === nom);
     r.membres.push({ n: nom, m: ag ? ag.mat : '' });
     if (!r.chef || r.chef === '—') r.chef = nom;
-    refreshEditMembres(document.getElementById('planning-date-filter').value);
+    refreshEditMembres();
   }
 
   function openPlanningImport(dateVal) {
@@ -2915,12 +2920,14 @@ let routesData = [
     if (!r.chef || r.chef === '—') { r.chef = r.membres[0]?.n || '—'; }
     logAction('modif', `Feuille de route ${r.id}`, `Chef : ${r.chef} · Agents : ${r.membres.map(m=>m.n).join(', ') || '—'}`);
     closeModal('modalEditRoute');
-    renderRoutes();
-    renderDashboard();
-    renderVacationJour();
-    renderPrepVacation();
-    renderPersonnel();
     saveData();
+    // Re-render léger immédiat, renders lourds différés
+    renderRoutes();
+    setTimeout(() => {
+      renderVacationJour();
+      renderPrepVacation();
+      renderPersonnel();
+    }, 50);
   }
 
 function clearAllRoutes() {
