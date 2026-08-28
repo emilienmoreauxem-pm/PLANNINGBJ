@@ -2553,12 +2553,13 @@ function _matchAgentToPlanning(agentNom, planningList) {
     document.querySelectorAll('.tab-modal-btn').forEach(b => b.classList.remove('active'));
     document.getElementById('tab-infos').classList.add('active');
     document.querySelector('.tab-modal-btn').classList.add('active');
-    // Load planning availability from localStorage (versioned key v2 = parser corrigé)
+    // Vider TOUS les anciens caches planning (clés v1 et sans version)
     try {
-      localStorage.removeItem('pm_planning_avail'); // supprimer ancien cache bugué
-      const saved = localStorage.getItem('pm_planning_avail_v2');
-      if (saved) planningAvailability = JSON.parse(saved);
+      localStorage.removeItem('pm_planning_avail');
+      localStorage.removeItem('pm_planning_avail_v2');
     } catch(e) {}
+    // Ne pas charger depuis le cache — toujours re-parser le fichier Excel
+    planningAvailability = {};
     // Pre-fill planning date from route date
     const planningDateInput = document.getElementById('planning-date-filter');
     if (planningDateInput) {
@@ -2864,7 +2865,7 @@ function _matchAgentToPlanning(agentNom, planningList) {
 
         const dateVal = document.getElementById('planning-date-filter')?.value;
         if (dateVal) updatePlanningDateFilter(dateVal);
-        try { localStorage.setItem('pm_planning_avail_v2', JSON.stringify(planningAvailability)); } catch(ex) {}
+        // Ne pas mettre en cache localStorage — toujours re-parser depuis le fichier Excel
       } catch(err) {
         console.error('XLSX parse error:', err);
         document.getElementById('xlsx-status').innerHTML =
