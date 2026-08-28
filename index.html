@@ -2498,6 +2498,22 @@ let routesData = [
     btn.classList.add('active');
   }
 
+// ── Correspondance flexible planning ↔ base agents (portée globale) ──
+function _matchAgentToPlanning(agentNom, planningList) {
+  if (!planningList || !agentNom) return false;
+  const norm = s => s.toUpperCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[-_]/g, ' ').trim();
+  const nomNorm    = norm(agentNom);
+  const nomFamille = nomNorm.split(' ')[0];
+  return planningList.some(p => {
+    const pNorm = norm(p);
+    return pNorm === nomNorm ||
+           pNorm.startsWith(nomFamille + ' ') ||
+           pNorm.split(' ')[0] === nomFamille;
+  });
+}
+
   function openEditRoute(idx) {
     if (!editMode) { alertLock(); return; }
     editingRouteIdx = idx;
@@ -2738,22 +2754,6 @@ let routesData = [
   let planningAvailability = {}; // { "2026-06-01": ["PARIS", "SCALISE", ...], ... }
 
   // Correspondance flexible entre nom planning (NOM PRENOM) et nom base agents
-  function _matchAgentToPlanning(agentNom, planningList) {
-    if (!planningList || !agentNom) return false;
-    const norm = s => s.toUpperCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // enlever accents
-      .replace(/[-_]/g, ' ').trim();
-    const nomNorm = norm(agentNom);
-    // Prendre juste le nom de famille (premier mot)
-    const nomFamille = nomNorm.split(' ')[0];
-    return planningList.some(p => {
-      const pNorm = norm(p);
-      return pNorm === nomNorm ||
-             pNorm.startsWith(nomFamille + ' ') ||
-             pNorm.split(' ')[0] === nomFamille;
-    });
-  }
-
   function updatePlanningDateFilter(dateVal) {
     const infoEl = document.getElementById('planning-availability-info');
     const tagsEl = document.getElementById('planning-available-agents');
