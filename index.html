@@ -2957,10 +2957,20 @@ function _matchAgentToPlanning(agentNom, planningList) {
 
       if (!currentName) continue;
 
+      // Ignorer les lignes non-agents
+      const upperName = currentName.toUpperCase();
+      if (upperName === 'TOTAL GROUPE' || upperName === 'TOTAL' ||
+          upperName === 'A RECRUTER' || /^(JANV|FEVR|MARS|AVRI|MAI|JUIN|JUIL|AOUT|SEPT|OCTO|NOVE|DECE)/i.test(upperName)) {
+        currentName = '';
+        continue;
+      }
+
       Object.entries(colToDate).forEach(([col, dateStr]) => {
         const cellRaw = rowR[col];
-        // Présent = valeur numérique 1 exactement
-        if (cellRaw === 1) {
+        // Présent = exactement 1 (nombre) — tout autre valeur = absent ou congé
+        const isPresent = cellRaw === 1 || cellRaw === true || String(cellRaw).trim() === '1';
+
+        if (isPresent) {
           if (!planningAvailability[dateStr].includes(currentName)) {
             planningAvailability[dateStr].push(currentName);
           }
