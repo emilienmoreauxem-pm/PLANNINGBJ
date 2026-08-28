@@ -2564,19 +2564,24 @@ let routesData = [
     saveData();
   }
 
-  // Options d'agents pré-compilées (reconstruites uniquement si la liste change)
+  // Options agents avec indicateur planning
   let _cachedAgentOpts = '';
   let _cachedAgentCount = 0;
+  let _cachedDateVal = '';
 
   function _getAgentOpts(selectedNom) {
-    // Reconstruire seulement si le nombre d'agents a changé
-    if (agents.length !== _cachedAgentCount) {
+    const dateVal   = document.getElementById('planning-date-filter')?.value || '';
+    const available = dateVal ? (planningAvailability[dateVal] || []) : [];
+
+    if (agents.length !== _cachedAgentCount || dateVal !== _cachedDateVal) {
       _cachedAgentCount = agents.length;
-      _cachedAgentOpts = agents.map(a =>
-        `<option value="${a.nom}">${a.nom} — mat.${a.mat||'—'}</option>`
-      ).join('');
+      _cachedDateVal    = dateVal;
+      _cachedAgentOpts  = agents.map(a => {
+        const avail = available.length ? _matchAgentToPlanning(a.nom, available) : null;
+        const icon  = avail === true ? '✓ ' : avail === false ? '✗ ' : '';
+        return `<option value="${a.nom}">${icon}${a.nom} — mat.${a.mat||'—'}</option>`;
+      }).join('');
     }
-    // Appliquer la sélection via JS après insertion (plus rapide que re-construire)
     return '<option value="">— Sélectionner —</option>' + _cachedAgentOpts;
   }
 
@@ -2585,22 +2590,39 @@ let routesData = [
     const container = document.getElementById('re-membres-list');
     if (!container) return;
 
+    const dateVal   = document.getElementById('planning-date-filter')?.value || '';
+    const available = dateVal ? (planningAvailability[dateVal] || []) : [];
+
     if (!r.membres.length) {
       container.innerHTML = '<div style="font-size:12px;color:var(--text-2);text-align:center;padding:16px">Aucun membre — cliquez « + Ajouter un agent »</div>';
       return;
     }
 
     container.innerHTML = r.membres.map((m, i) => {
-      const isChef = m.n === r.chef;
-      return `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;background:rgba(255,255,255,0.03);border-radius:8px;padding:7px 8px">
-        <div class="agent-avatar ${isChef ? 'avatar-amber' : 'avatar-blue'}" style="flex-shrink:0;width:28px;height:28px;font-size:10px">${initials(m.n||'?')}</div>
-        <select class="form-select" style="flex:1;font-size:12px" onchange="updMembre(${i},this.value)">
-          ${_getAgentOpts(m.n)}
-        </select>
-        <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--amber);white-space:nowrap;cursor:pointer;padding:3px 7px;border-radius:5px;border:1px solid ${isChef?'rgba(245,158,11,0.4)':'transparent'};background:${isChef?'rgba(245,158,11,0.1)':'transparent'}">
+      const isChef  = m.n === r.chef;
+      const avail   = available.length ? _matchAgentToPlanning(m.n, available) : null;
+
+      // Couleur selon disponibilité planning
+      const borderColor = avail === true  ? 'rgba(16,185,129,.35)' : avail === false ? 'rgba(239,68,68,.3)' : 'transparent';
+      const bgColor     = avail === true  ? 'rgba(16,185,129,.06)' : avail === false ? 'rgba(239,68,68,.06)' : 'rgba(255,255,255,.03)';
+      const availBadge  = avail === true
+        ? '<span style="font-size:10px;color:#6ee7b7;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);padding:1px 6px;border-radius:4px;margin-left:4px">✓ Présent</span>'
+        : avail === false
+        ? '<span style="font-size:10px;color:#fca5a5;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);padding:1px 6px;border-radius:4px;margin-left:4px">✗ Absent</span>'
+        : '';
+
+      return `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;border-radius:8px;padding:7px 8px;border:1px solid ${borderColor};background:${bgColor}">
+        <div class="agent-avatar ${isChef?'avatar-amber':'avatar-blue'}" style="flex-shrink:0;width:28px;height:28px;font-size:10px">${initials(m.n||'?')}</div>
+        <div style="flex:1;min-width:0">
+          <select class="form-select" style="width:100%;font-size:12px" onchange="updMembre(${i},this.value)">
+            ${_getAgentOpts(m.n)}
+          </select>
+          ${availBadge}
+        </div>
+        <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--amber);white-space:nowrap;cursor:pointer;padding:3px 7px;border-radius:5px;border:1px solid ${isChef?'rgba(245,158,11,.4)':'transparent'};background:${isChef?'rgba(245,158,11,.1)':'transparent'}">
           <input type="radio" name="chef-radio" ${isChef?'checked':''} onchange="setChefIdx(${i})"> Chef
         </label>
-        <button style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#fca5a5;cursor:pointer;font-size:13px;padding:3px 7px;border-radius:5px" onclick="removeMembre(${i})">✕</button>
+        <button style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#fca5a5;cursor:pointer;font-size:13px;padding:3px 7px;border-radius:5px" onclick="removeMembre(${i})">✕</button>
       </div>`;
     }).join('');
 
@@ -2715,41 +2737,90 @@ let routesData = [
 
   let planningAvailability = {}; // { "2026-06-01": ["PARIS", "SCALISE", ...], ... }
 
+  // Correspondance flexible entre nom planning (NOM PRENOM) et nom base agents
+  function _matchAgentToPlanning(agentNom, planningList) {
+    if (!planningList || !agentNom) return false;
+    const norm = s => s.toUpperCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // enlever accents
+      .replace(/[-_]/g, ' ').trim();
+    const nomNorm = norm(agentNom);
+    // Prendre juste le nom de famille (premier mot)
+    const nomFamille = nomNorm.split(' ')[0];
+    return planningList.some(p => {
+      const pNorm = norm(p);
+      return pNorm === nomNorm ||
+             pNorm.startsWith(nomFamille + ' ') ||
+             pNorm.split(' ')[0] === nomFamille;
+    });
+  }
+
   function updatePlanningDateFilter(dateVal) {
     const infoEl = document.getElementById('planning-availability-info');
     const tagsEl = document.getElementById('planning-available-agents');
     if (!dateVal) {
-      infoEl.textContent = 'Saisir une date pour filtrer les agents disponibles';
-      tagsEl.innerHTML = '';
+      if (infoEl) infoEl.textContent = 'Charger le fichier Excel pour voir les disponibilités';
+      if (tagsEl) tagsEl.innerHTML = '';
       refreshEditMembres();
       return;
     }
-    const available = planningAvailability[dateVal];
-    if (available && available.length > 0) {
-      infoEl.innerHTML = `<span style="color:var(--green)">✓ ${available.length} agents disponibles ce jour</span>`;
-      tagsEl.innerHTML = available.map(nom =>
-        `<span onclick="quickAddAgentToRoute('${nom}')" style="cursor:pointer;font-size:11px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.3);color:#6ee7b7;padding:3px 9px;border-radius:5px;transition:all .12s" title="Cliquer pour ajouter à l'équipage">${nom} +</span>`
-      ).join('');
+    const available = planningAvailability[dateVal] || [];
+    const r = routesData[editingRouteIdx];
+    const alreadyPositioned = (r?.membres || []).map(m => m.n);
+
+    if (available.length > 0) {
+      if (infoEl) infoEl.innerHTML = `<span style="color:var(--green)">✓ ${available.length} agents disponibles ce jour</span>`;
+      if (tagsEl) {
+        // Afficher les agents disponibles par statut
+        const dispo = agents.filter(a => _matchAgentToPlanning(a.nom, available) && !alreadyPositioned.includes(a.nom));
+        const positionne = agents.filter(a => _matchAgentToPlanning(a.nom, available) && alreadyPositioned.includes(a.nom));
+
+        tagsEl.innerHTML = [
+          ...positionne.map(a => `<span style="font-size:11px;background:rgba(251,146,60,.15);border:1px solid rgba(251,146,60,.4);color:#fb923c;padding:3px 9px;border-radius:5px" title="Déjà positionné dans cet équipage">📌 ${a.nom}</span>`),
+          ...dispo.map(a => `<span onclick="quickAddAgentToRoute('${a.nom}')" style="cursor:pointer;font-size:11px;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:#6ee7b7;padding:3px 9px;border-radius:5px" title="Disponible — cliquer pour ajouter">✓ ${a.nom} +</span>`),
+        ].join('');
+      }
     } else {
-      infoEl.innerHTML = `<span style="color:var(--amber)">⚠ Aucun agent présent ce jour selon le planning — vérifiez le fichier chargé</span>`;
-      tagsEl.innerHTML = '';
+      if (infoEl) infoEl.innerHTML = `<span style="color:var(--amber)">⚠ Aucun agent présent ce jour — chargez le planning xlsx</span>`;
+      if (tagsEl) tagsEl.innerHTML = '';
     }
-    // Refresh membres list to highlight available agents
     refreshEditMembres();
   }
 
   function quickAddAgentToRoute(nom) {
     const r = routesData[editingRouteIdx];
-    if (r.membres.some(m => m.n === nom)) return; // déjà présent
+    if (r.membres.some(m => m.n === nom)) return;
     const ag = agents.find(a => a.nom === nom);
     r.membres.push({ n: nom, m: ag ? ag.mat : '' });
     if (!r.chef || r.chef === '—') r.chef = nom;
     refreshEditMembres();
+    updatePlanningDateFilter(document.getElementById('planning-date-filter')?.value || '');
   }
 
-  function openPlanningImport(dateVal) {
-    // Legacy stub — replaced by loadPlanningXlsx
+  // ── Options agents enrichies avec statut planning ────────
+  function _getAgentOpts() {
+    const dateVal = document.getElementById('planning-date-filter')?.value || '';
+    const available = dateVal ? (planningAvailability[dateVal] || []) : [];
+    const r = routesData[editingRouteIdx];
+    const positioned = (r?.membres || []).map(m => m.n);
+
+    if (agents.length !== _cachedAgentCount || dateVal !== (_cachedDateVal||'')) {
+      _cachedAgentCount = agents.length;
+      _cachedDateVal = dateVal;
+
+      _cachedAgentOpts = agents.map(a => {
+        const avail   = available.length ? _matchAgentToPlanning(a.nom, available) : null;
+        const inRoute = positioned.includes(a.nom);
+        let icon = '';
+        if (avail === true && !inRoute)  icon = '✓ ';
+        if (avail === true && inRoute)   icon = '📌 ';
+        if (avail === false)             icon = '✗ ';
+        return `<option value="${a.nom}" data-avail="${avail}" data-inroute="${inRoute}">${icon}${a.nom} — mat.${a.mat||'—'}</option>`;
+      }).join('');
+    }
+    return '<option value="">— Sélectionner —</option>' + _cachedAgentOpts;
   }
+
+  let _cachedDateVal = '';
 
   // ── Lecture du fichier XLSX planning ─────────────────────
   // Structure attendue : ligne 1 = en-têtes (dont les dates au format Excel ou texte)
