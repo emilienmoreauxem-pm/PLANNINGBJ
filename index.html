@@ -2797,35 +2797,7 @@ let routesData = [
   }
 
   // ── Options agents enrichies avec statut planning ────────
-  function _getAgentOpts() {
-    const dateVal = document.getElementById('planning-date-filter')?.value || '';
-    const available = dateVal ? (planningAvailability[dateVal] || []) : [];
-    const r = routesData[editingRouteIdx];
-    const positioned = (r?.membres || []).map(m => m.n);
-
-    if (agents.length !== _cachedAgentCount || dateVal !== (_cachedDateVal||'')) {
-      _cachedAgentCount = agents.length;
-      _cachedDateVal = dateVal;
-
-      _cachedAgentOpts = agents.map(a => {
-        const avail   = available.length ? _matchAgentToPlanning(a.nom, available) : null;
-        const inRoute = positioned.includes(a.nom);
-        let icon = '';
-        if (avail === true && !inRoute)  icon = '✓ ';
-        if (avail === true && inRoute)   icon = '📌 ';
-        if (avail === false)             icon = '✗ ';
-        return `<option value="${a.nom}" data-avail="${avail}" data-inroute="${inRoute}">${icon}${a.nom} — mat.${a.mat||'—'}</option>`;
-      }).join('');
-    }
-    return '<option value="">— Sélectionner —</option>' + _cachedAgentOpts;
-  }
-
-  let _cachedDateVal = '';
-
   // ── Lecture du fichier XLSX planning ─────────────────────
-  // Structure attendue : ligne 1 = en-têtes (dont les dates au format Excel ou texte)
-  // Colonnes agents : colonne A (ou toute colonne contenant le nom)
-  // Présence : 1 dans la cellule de la date = agent disponible
   let _xlsxWorkbook = null;
 
   function loadPlanningXlsx(input) {
