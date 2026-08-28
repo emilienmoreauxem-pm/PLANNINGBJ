@@ -2503,14 +2503,32 @@ function _matchAgentToPlanning(agentNom, planningList) {
   if (!planningList || !agentNom) return false;
   const norm = s => s.toUpperCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[-_]/g, ' ').trim();
-  const nomNorm    = norm(agentNom);
-  const nomFamille = nomNorm.split(' ')[0];
+    .replace(/[-_']/g, ' ').replace(/\s+/g,' ').trim();
+
+  const nomNorm = norm(agentNom);
+  const nomWords = nomNorm.split(' ');
+
   return planningList.some(p => {
-    const pNorm = norm(p);
-    return pNorm === nomNorm ||
-           pNorm.startsWith(nomFamille + ' ') ||
-           pNorm.split(' ')[0] === nomFamille;
+    const pNorm  = norm(p);
+    const pWords = pNorm.split(' ');
+
+    // 1. Correspondance exacte
+    if (pNorm === nomNorm) return true;
+
+    // 2. Compter les mots en commun
+    const commonWords = nomWords.filter(w => w.length > 2 && pWords.includes(w));
+    if (commonWords.length >= 1) {
+      // Au moins 1 mot de plus de 2 lettres en commun
+      // Vérifier que ce n'est pas un prénom seul qui match un autre agent
+      // en exigeant que le mot commun soit le premier mot de l'un ou l'autre
+      const firstNom = nomWords[0];
+      const firstP   = pWords[0];
+      return firstNom === firstP ||                        // même premier mot
+             pWords.includes(firstNom) ||                 // premier mot agent dans planning
+             nomWords.includes(firstP) ||                 // premier mot planning dans agent
+             (commonWords.length >= 2);                   // au moins 2 mots communs
+    }
+    return false;
   });
 }
 
