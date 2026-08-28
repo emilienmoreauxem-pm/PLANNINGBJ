@@ -2535,9 +2535,10 @@ function _matchAgentToPlanning(agentNom, planningList) {
     document.querySelectorAll('.tab-modal-btn').forEach(b => b.classList.remove('active'));
     document.getElementById('tab-infos').classList.add('active');
     document.querySelector('.tab-modal-btn').classList.add('active');
-    // Load planning availability from localStorage
+    // Load planning availability from localStorage (versioned key v2 = parser corrigé)
     try {
-      const saved = localStorage.getItem('pm_planning_avail');
+      localStorage.removeItem('pm_planning_avail'); // supprimer ancien cache bugué
+      const saved = localStorage.getItem('pm_planning_avail_v2');
       if (saved) planningAvailability = JSON.parse(saved);
     } catch(e) {}
     // Pre-fill planning date from route date
@@ -2845,7 +2846,7 @@ function _matchAgentToPlanning(agentNom, planningList) {
 
         const dateVal = document.getElementById('planning-date-filter')?.value;
         if (dateVal) updatePlanningDateFilter(dateVal);
-        try { localStorage.setItem('pm_planning_avail', JSON.stringify(planningAvailability)); } catch(ex) {}
+        try { localStorage.setItem('pm_planning_avail_v2', JSON.stringify(planningAvailability)); } catch(ex) {}
       } catch(err) {
         console.error('XLSX parse error:', err);
         document.getElementById('xlsx-status').innerHTML =
@@ -2931,49 +2932,38 @@ function _matchAgentToPlanning(agentNom, planningList) {
     if (!Object.keys(colToDate).length) return;
 
     // ── Lignes agents ────────────────────────────────────────
-    let currentName = '';
+    // Chaque agent occupe 2 lignes (brigade jour / brigade nuit)
+    // On lit UNIQUEMENT la ligne dont col A est remplie (1ère ligne = brigade jour)
     for (let r = 2; r < rowsRaw.length; r++) {
       const rowR = rowsRaw[r];
       const rowF = rowsFmt[r];
       if (!rowR) continue;
 
-      // Col 0 : nom agent (texte) ou null/vide (2e ligne de la paire)
+      // Ignorer les lignes sans nom en col A (2e ligne de la paire = brigade nuit)
       const nameCell = String(rowF[0] || '').trim();
-      if (nameCell) {
-        // Ignorer les lignes non-agents
-        const upper = nameCell.toUpperCase();
-        if (upper === 'TOTAL GROUPE' || upper === 'A RECRUTER' ||
-            upper === 'TOTAL' || /^(JANV|FEVR|MARS|AVRI|MAI|JUIN|JUIL|AOUT|SEPT|OCTO|NOVE|DECE)/i.test(upper)) {
-          currentName = '';
-        } else {
-          // Nettoyer : enlever "- 285", "- PM 264", "- PM  190", "PM266", ou " 268" sans tiret
-          currentName = upper
-            .replace(/\s*[-–—]\s*(PM\s*)?\d+\s*$/, '')  // avec tiret : "- 285" ou "- PM 264"
-            .replace(/\s*[-–—]\s*PM\d+\s*$/i, '')        // "- PM266"
-            .replace(/\s+\d+\s*$/, '')                    // sans tiret : " 268"
-            .trim();
-        }
-      }
-
-      if (!currentName) continue;
+      if (!nameCell || nameCell === 'null' || nameCell === 'undefined') continue;
 
       // Ignorer les lignes non-agents
-      const upperName = currentName.toUpperCase();
-      if (upperName === 'TOTAL GROUPE' || upperName === 'TOTAL' ||
-          upperName === 'A RECRUTER' || /^(JANV|FEVR|MARS|AVRI|MAI|JUIN|JUIL|AOUT|SEPT|OCTO|NOVE|DECE)/i.test(upperName)) {
-        currentName = '';
-        continue;
-      }
+      const upper = nameCell.toUpperCase();
+      if (upper === 'TOTAL GROUPE' || upper === 'TOTAL' ||
+          upper === 'A RECRUTER'   || upper.startsWith('TOTAL') ||
+          /^(JANV|FEVR|MARS|AVRI|MAI|JUIN|JUIL|AOUT|SEPT|OCTO|NOVE|DECE)/i.test(upper)) continue;
+
+      // Nettoyer le nom : enlever matricule
+      const agentName = upper
+        .replace(/\s*[-–—]\s*(PM\s*)?\d+\s*$/, '')
+        .replace(/\s*[-–—]\s*PM\d+\s*$/i, '')
+        .replace(/\s+\d+\s*$/, '')
+        .trim();
+
+      if (!agentName) continue;
 
       Object.entries(colToDate).forEach(([col, dateStr]) => {
         const cellRaw = rowR[col];
-        // Présent = exactement 1 (nombre) — tout autre valeur = absent ou congé
+        // Présent = exactement 1
         const isPresent = cellRaw === 1 || cellRaw === true || String(cellRaw).trim() === '1';
-
-        if (isPresent) {
-          if (!planningAvailability[dateStr].includes(currentName)) {
-            planningAvailability[dateStr].push(currentName);
-          }
+        if (isPresent && !planningAvailability[dateStr].includes(agentName)) {
+          planningAvailability[dateStr].push(agentName);
         }
       });
     }
