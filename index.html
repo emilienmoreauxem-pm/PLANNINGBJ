@@ -1101,19 +1101,21 @@ window._firebaseConfig = null; // sera remplacé par config.js si présent
 
   <!-- ═══════════ PLANNING PRÉVISIONNEL ═══════════ -->
   <div class="tab-content" id="tab-planning">
-    <!-- Header -->
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:20px 0 14px">
-      <div class="section-title" style="padding:0;margin:0">📅 Planning prévisionnel — Vacations à venir</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="add-btn" style="background:rgba(192,132,252,0.15);border-color:rgba(192,132,252,0.4);color:#c084fc" onclick="prevAddVacation()">+ Nouvelle vacation</button>
-        <button class="add-btn" style="background:rgba(192,132,252,0.1);border-color:rgba(192,132,252,0.3);color:#c084fc" onclick="prevCopyToday()">↳ Copier vacation du jour</button>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:16px 0 12px">
+      <div>
+        <div class="section-title" style="padding:0;margin:0">📅 Planning — Historique des vacations</div>
+        <div style="font-size:12px;color:var(--text-2);margin-top:3px">Lecture seule · Pour modifier, allez dans <b>Création/Modification vacation</b></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button onclick="planningGoToday()" style="background:rgba(192,132,252,.1);border:1px solid rgba(192,132,252,.3);color:#c084fc;padding:6px 14px;border-radius:var(--radius-sm);font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif">Aujourd'hui</button>
+        <span id="planning-range-label" style="font-size:11px;color:var(--text-3)"></span>
       </div>
     </div>
 
-    <!-- Calendrier bande -->
-    <div id="prev-calendar-strip" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;margin-bottom:16px;scrollbar-width:thin;-webkit-overflow-scrolling:touch"></div>
+    <!-- Bande calendrier -->
+    <div id="prev-calendar-strip" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:16px;scrollbar-width:thin"></div>
 
-    <!-- Contenu jour sélectionné -->
+    <!-- Vue du jour sélectionné -->
     <div id="prev-day-container"></div>
   </div>
 
@@ -1149,17 +1151,31 @@ window._firebaseConfig = null; // sera remplacé par config.js si présent
 
   <!-- ═══════════ ARCHIVES ═══════════ -->
   <div class="tab-content" id="tab-archives">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:20px 0 12px">
-      <div class="section-title" style="padding:0;margin:0">Archives des vacations</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:16px 0 12px">
+      <div>
+        <div class="section-title" style="padding:0;margin:0">🗂 Archives des vacations</div>
+        <div style="font-size:12px;color:var(--text-2);margin-top:3px">Historique complet — planning enregistré + archives manuelles</div>
+      </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <button class="add-btn" style="background:rgba(245,158,11,0.15);border-color:rgba(245,158,11,0.4);color:#fcd34d" onclick="saveCurrentVacation()">💾 Archiver la vacation du jour</button>
-        <label class="add-btn" style="background:rgba(16,185,129,0.1);border-color:rgba(16,185,129,0.3);color:#6ee7b7;cursor:pointer">
-          📂 Importer un fichier JSON
+        <select id="archives-year-filter" onchange="renderArchives()" style="background:var(--surface);border:1px solid var(--border);color:var(--text-1);padding:5px 10px;border-radius:var(--radius-sm);font-size:12px;font-family:'Inter',sans-serif;outline:none">
+          <option value="all">Toutes les années</option>
+        </select>
+        <select id="archives-month-filter" onchange="renderArchives()" style="background:var(--surface);border:1px solid var(--border);color:var(--text-1);padding:5px 10px;border-radius:var(--radius-sm);font-size:12px;font-family:'Inter',sans-serif;outline:none">
+          <option value="all">Tous les mois</option>
+          <option value="1">Janvier</option><option value="2">Février</option><option value="3">Mars</option>
+          <option value="4">Avril</option><option value="5">Mai</option><option value="6">Juin</option>
+          <option value="7">Juillet</option><option value="8">Août</option><option value="9">Septembre</option>
+          <option value="10">Octobre</option><option value="11">Novembre</option><option value="12">Décembre</option>
+        </select>
+        <label class="add-btn" style="background:rgba(16,185,129,.1);border-color:rgba(16,185,129,.3);color:#6ee7b7;cursor:pointer">
+          📂 Importer JSON
           <input type="file" accept=".json" style="display:none" onchange="importArchiveFromFile(this)">
         </label>
+        <button class="add-btn" onclick="exportAllArchives()" style="background:rgba(34,211,238,.1);border-color:rgba(34,211,238,.3);color:var(--cyan)">⬇ Exporter tout</button>
       </div>
     </div>
-    <div id="archivesList" style="display:flex;flex-direction:column;gap:12px"></div>
+    <div id="archives-stats" style="margin-bottom:12px"></div>
+    <div id="archivesList" style="display:flex;flex-direction:column;gap:6px"></div>
   </div>
 
 </div>
@@ -1504,6 +1520,8 @@ function _autoSaveToPlanning() {
     const picker = document.getElementById('prep-date-picker');
     const dateVal = picker?.value;
     if (!dateVal || !editMode) return;
+    // Ne pas sauvegarder si aucun équipage (évite d'écraser avec un brouillon vide)
+    if (!routesData.length) return;
 
     const [y, m, d] = dateVal.split('-');
     const dateFormatted = `${d}/${m}/${y}`;
@@ -1517,23 +1535,27 @@ function _autoSaveToPlanning() {
       missions: JSON.parse(JSON.stringify(regularMissions)),
       savedAt:  new Date().toLocaleString('fr-FR'),
       savedBy:  currentEditor ? (EDITOR_CODES[currentEditor]?.label || currentEditor) : '—',
-      auto:     true, // marque l'enregistrement automatique
+      auto:     true,
     };
 
-    const existingIdx = prevVacations.findIndex(v => v.date === dateFormatted);
+    // Mettre à jour UNIQUEMENT la date correspondante
+    const existingIdx = prevVacations.findIndex(v => {
+      const vd = v.dateStr || v.date || '';
+      return vd === dateFormatted;
+    });
+
     if (existingIdx >= 0) {
       prevVacations[existingIdx] = snapshot;
     } else {
       prevVacations.unshift(snapshot);
     }
 
-    // Mise à jour indicator discret
     const statusEl = document.getElementById('prep-date-status');
     if (statusEl) {
       const t = new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
       statusEl.innerHTML = `<span style="font-size:10px;color:var(--text-3)">● Auto-enregistré ${t}</span>`;
     }
-  }, 1500); // 1.5s après la dernière modif
+  }, 1500);
 }
 
 // ── Journal d'actions ────────────────────────────────────────
@@ -1789,35 +1811,39 @@ function renderVacationJour(targetISO) {
 
 function onPrepDateChange(dateVal) {
   const statusEl = document.getElementById('prep-date-status');
+  if (!dateVal) { renderPrepVacation(); return; }
 
-  if (!dateVal) {
-    renderPrepVacation();
-    return;
-  }
-
-  // Convertir en DD/MM/YYYY pour chercher dans prevVacations
   const [y, m, d] = dateVal.split('-');
   const dateFormatted = `${d}/${m}/${y}`;
 
-  // Chercher si une vacation existe pour cette date
+  // Chercher si une vacation existe pour cette date dans prevVacations
   const existing = (prevVacations || []).find(v => {
     const vd = v.dateStr || v.date || '';
     return vd === dateFormatted || vd === dateVal;
   });
 
   if (existing) {
-    // Charger silencieusement la vacation existante
+    // Charger la vacation enregistrée pour cette date
     routesData.length = 0;
     (existing.routes || []).forEach(r => routesData.push(JSON.parse(JSON.stringify(r))));
-    if (existing.postes) Object.assign(postesData, JSON.parse(JSON.stringify(existing.postes)));
+    if (existing.postes) {
+      Object.keys(postesData).forEach(k => { postesData[k] = []; });
+      Object.assign(postesData, JSON.parse(JSON.stringify(existing.postes)));
+    }
     if (existing.missions && existing.missions.length) {
       regularMissions.length = 0;
       existing.missions.forEach(m => regularMissions.push(m));
     }
     if (statusEl) statusEl.innerHTML = `<span style="color:#6ee7b7">✓ Vacation du ${dateFormatted} chargée</span>`;
   } else {
+    // Nouvelle date — partir d'un brouillon vide
+    routesData.length = 0;
+    Object.keys(postesData).forEach(k => { postesData[k] = []; });
     if (statusEl) statusEl.innerHTML = `<span style="color:var(--text-3)">Nouvelle vacation — ${dateFormatted}</span>`;
   }
+
+  // Invalider le cache options agents
+  _cachedAgentCount = -1;
 
   renderPrepVacation();
 }
@@ -2735,7 +2761,8 @@ function _matchAgentToPlanning(agentNom, planningList) {
     const ag = agents.find(a => a.nom === nom);
     if (r.chef === r.membres[idx]?.n) r.chef = nom;
     r.membres[idx] = { n: nom, m: ag ? ag.mat : '' };
-    refreshEditMembres();  // re-rend seulement la liste dans la modale
+    _cachedAgentCount = -1; // invalider cache couleurs
+    refreshEditMembres();
   }
 
   function setChefIdx(idx) {
@@ -2748,11 +2775,13 @@ function _matchAgentToPlanning(agentNom, planningList) {
     const r = routesData[editingRouteIdx];
     if (r.chef === r.membres[idx]?.n) r.chef = r.membres.find((_,i)=>i!==idx)?.n || '—';
     r.membres.splice(idx, 1);
+    _cachedAgentCount = -1;
     refreshEditMembres();
   }
 
   function addMembreToRoute() {
     routesData[editingRouteIdx].membres.push({ n: agents[0]?.nom || '', m: agents[0]?.mat || '' });
+    _cachedAgentCount = -1;
     refreshEditMembres();
   }
   function addSpecMissionRow(text) {
@@ -2812,6 +2841,7 @@ function _matchAgentToPlanning(agentNom, planningList) {
     const ag = agents.find(a => a.nom === nom);
     r.membres.push({ n: nom, m: ag ? ag.mat : '' });
     if (!r.chef || r.chef === '—') r.chef = nom;
+    _cachedAgentCount = -1; // invalider cache pour mettre à jour les couleurs
     refreshEditMembres();
     updatePlanningDateFilter(document.getElementById('planning-date-filter')?.value || '');
   }
@@ -3889,47 +3919,222 @@ function restoreArchive(idx) {
 
 function renderArchives() {
   const container = document.getElementById('archivesList');
-  if (!archives.length) {
-    container.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);font-size:13px">
-      <div style="font-size:32px;margin-bottom:12px">🗂</div>
-      Aucune archive. Cliquez sur « Archiver la vacation du jour » pour sauvegarder l'état actuel.
+  const statsEl   = document.getElementById('archives-stats');
+  const yearSel   = document.getElementById('archives-year-filter');
+  const monthSel  = document.getElementById('archives-month-filter');
+  if (!container) return;
+
+  // ── Fusionner sources : prevVacations + archives manuelles ─
+  const parseDate = str => {
+    if (!str) return null;
+    // DD/MM/YYYY
+    const p = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (p) return new Date(+p[3], +p[2]-1, +p[1]);
+    // YYYY-MM-DD
+    const p2 = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (p2) return new Date(+p2[1], +p2[2]-1, +p2[3]);
+    return null;
+  };
+
+  const toFR = d => d ? d.toLocaleDateString('fr-FR') : '—';
+
+  // Construire liste unifiée
+  const allItems = [];
+
+  // prevVacations (planning)
+  (prevVacations || []).forEach(v => {
+    const dateStr = v.dateStr || v.date || '';
+    const d = parseDate(dateStr);
+    if (!d) return;
+    allItems.push({
+      dateStr: toFR(d),
+      dateObj: d,
+      source:  'planning',
+      routes:  v.routes || [],
+      postes:  v.postes || {},
+      missions: v.missions || [],
+      savedAt: v.savedAt || '',
+      savedBy: v.savedBy || '',
+      nbEquip: (v.routes||[]).filter(r=>r.membres&&r.membres.length>0).length,
+      nbAgents: new Set((v.routes||[]).flatMap(r=>(r.membres||[]).map(m=>m.n))).size,
+    });
+  });
+
+  // Archives manuelles
+  (archives || []).forEach((a, idx) => {
+    const d = parseDate(a.date);
+    if (!d) return;
+    allItems.push({
+      dateStr: toFR(d),
+      dateObj: d,
+      source:  'manuel',
+      archiveIdx: idx,
+      routes:  a.routesData || [],
+      postes:  a.postesData || {},
+      missions: a.missions || [],
+      savedAt: a.savedAt || '',
+      savedBy: '',
+      nbEquip: (a.routesData||[]).filter(r=>r.membres&&r.membres.length>0).length,
+      nbAgents: (a.personnel||[]).length,
+    });
+  });
+
+  // Trier par date décroissante
+  allItems.sort((a, b) => b.dateObj - a.dateObj);
+
+  // ── Alimenter le filtre années ─────────────────────────────
+  const years = [...new Set(allItems.map(i => i.dateObj.getFullYear()))].sort((a,b)=>b-a);
+  const currentYear = yearSel?.value || 'all';
+  if (yearSel) {
+    const prevVal = yearSel.value;
+    yearSel.innerHTML = '<option value="all">Toutes les années</option>' +
+      years.map(y => `<option value="${y}" ${y==prevVal?'selected':''}>${y}</option>`).join('');
+    if (!prevVal || prevVal==='all') {
+      // Sélectionner l'année courante par défaut
+      const thisYear = new Date().getFullYear();
+      if (years.includes(thisYear)) yearSel.value = thisYear;
+    }
+  }
+
+  // ── Filtrer ────────────────────────────────────────────────
+  const filterYear  = yearSel?.value  || 'all';
+  const filterMonth = monthSel?.value || 'all';
+  const filtered = allItems.filter(i => {
+    if (filterYear  !== 'all' && i.dateObj.getFullYear()  !== +filterYear)  return false;
+    if (filterMonth !== 'all' && i.dateObj.getMonth()+1   !== +filterMonth) return false;
+    return true;
+  });
+
+  // ── Stats ──────────────────────────────────────────────────
+  if (statsEl) {
+    const totalDays = new Set(allItems.map(i=>i.dateStr)).size;
+    statsEl.innerHTML = `<div style="display:flex;gap:10px;flex-wrap:wrap">
+      <span class="badge badge-blue">${allItems.length} vacations au total</span>
+      <span class="badge badge-cyan">${filtered.length} affichées</span>
+      <span class="badge badge-green">${years.length} année(s)</span>
+    </div>`;
+  }
+
+  if (!filtered.length) {
+    container.innerHTML = `<div style="text-align:center;padding:48px;color:var(--text-2);font-size:13px">
+      <div style="font-size:36px;margin-bottom:12px">🗂</div>
+      Aucune vacation pour cette période.<br>
+      <span style="font-size:12px;color:var(--text-3)">Les vacations enregistrées via 💾 apparaissent automatiquement ici.</span>
     </div>`;
     return;
   }
-  container.innerHTML = archives.map((a, idx) => {
-    const equipRows = a.routesData.map(r => {
-      const agentNames = r.membres.map(m => `<span class="badge badge-gray" style="font-size:10px">${m.n}</span>`).join(' ');
-      return `<div style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">
-        <span class="archive-equip-label">${r.id}</span>
-        <div style="display:flex;flex-wrap:wrap;gap:4px;flex:1">${agentNames || '<span style="font-size:11px;color:var(--text-muted)">—</span>'}</div>
-      </div>`;
-    }).join('');
-    return `<div class="archive-card">
-      <div class="archive-header">
-        <div>
-          <div class="archive-title">📅 ${a.date} — ${a.shift}</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:2px">Archivé le ${a.savedAt}</div>
+
+  // ── Grouper par mois ───────────────────────────────────────
+  const MOIS = ['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+  const groups = {};
+  filtered.forEach(i => {
+    const key = `${i.dateObj.getFullYear()}-${String(i.dateObj.getMonth()+1).padStart(2,'0')}`;
+    if (!groups[key]) groups[key] = { label: `${MOIS[i.dateObj.getMonth()+1]} ${i.dateObj.getFullYear()}`, items: [] };
+    groups[key].items.push(i);
+  });
+
+  container.innerHTML = Object.entries(groups)
+    .sort(([a],[b]) => b.localeCompare(a))
+    .map(([key, grp]) => `
+      <div style="margin-bottom:16px">
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-3);
+          padding:6px 0;border-bottom:1px solid var(--border);margin-bottom:8px;display:flex;align-items:center;gap:8px">
+          <span>${grp.label}</span>
+          <span class="badge badge-gray" style="font-size:10px">${grp.items.length} vacation(s)</span>
         </div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <span class="badge badge-blue">${a.personnel.length} agents</span>
-          <span class="badge badge-cyan">${a.routesData.length} équipages</span>
-          <button class="add-btn" style="font-size:11px;padding:5px 12px" onclick="restoreArchive(${idx})">↩ Restaurer</button>
-          <button class="add-btn" style="font-size:11px;padding:5px 12px;background:rgba(16,185,129,0.1);border-color:rgba(16,185,129,0.3);color:#6ee7b7" onclick="exportArchive(${idx})">⬇ Exporter</button>
-          <button class="route-delete-btn" style="font-size:11px;padding:5px 10px" onclick="deleteArchive(${idx})">✕</button>
-        </div>
+        ${grp.items.map(item => _renderArchiveRow(item)).join('')}
       </div>
-      <div class="archive-body">
-        <div class="archive-section">
-          <div class="archive-section-title">Composition des équipages</div>
-          <div>${equipRows}</div>
-        </div>
-        ${a.missions && a.missions.length ? `<div class="archive-section">
-          <div class="archive-section-title">${a.missions.length} missions archivées</div>
-          <div style="font-size:12px;color:var(--text-muted)">${a.missions.slice(0,3).map(m=>`<span class="badge badge-gray" style="margin:2px">${m.num}</span>`).join('')}${a.missions.length > 3 ? `<span style="font-size:11px;color:var(--text-muted)"> +${a.missions.length-3} autres</span>` : ''}</div>
-        </div>` : ''}
+    `).join('');
+}
+
+function _renderArchiveRow(item) {
+  const sourceBadge = item.source === 'planning'
+    ? '<span class="badge badge-blue" style="font-size:10px">Planning</span>'
+    : '<span class="badge badge-amber" style="font-size:10px">Manuel</span>';
+
+  const equipSummary = item.routes
+    .filter(r=>r.membres&&r.membres.length>0)
+    .map(r=>`<span style="font-size:11px;color:var(--text-2)">${r.id} (${r.membres.length})</span>`)
+    .join(' · ');
+
+  const editBtn = editMode
+    ? `<button onclick="archiveLoadToPrep('${item.dateStr}','${item.source}',${item.archiveIdx??'null'})"
+        style="background:rgba(192,132,252,.12);border:1px solid rgba(192,132,252,.3);color:#c084fc;
+        padding:3px 10px;border-radius:5px;font-size:11px;cursor:pointer;font-family:'Inter',sans-serif">
+        ✏ Charger</button>`
+    : '';
+
+  const exportBtn = item.source === 'manuel' && item.archiveIdx !== undefined
+    ? `<button onclick="exportArchive(${item.archiveIdx})"
+        style="background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.25);color:#6ee7b7;
+        padding:3px 10px;border-radius:5px;font-size:11px;cursor:pointer;font-family:'Inter',sans-serif">⬇</button>`
+    : '';
+
+  return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);
+    padding:10px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;transition:border-color .12s"
+    onmouseover="this.style.borderColor='var(--border-hi)'" onmouseout="this.style.borderColor='var(--border)'">
+    <div style="flex:1;min-width:0">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:3px">
+        <span style="font-weight:600;font-size:13px;color:var(--text-1)">${item.dateStr}</span>
+        ${sourceBadge}
+        <span class="badge badge-gray" style="font-size:10px">${item.nbEquip} équip.</span>
+        <span class="badge badge-gray" style="font-size:10px">${item.nbAgents} agents</span>
       </div>
-    </div>`;
-  }).join('');
+      <div style="font-size:11px;color:var(--text-3)">${equipSummary || '—'}</div>
+      ${item.savedAt ? `<div style="font-size:10px;color:var(--text-3);margin-top:2px">Enregistré ${item.savedAt}${item.savedBy?' par '+item.savedBy:''}</div>` : ''}
+    </div>
+    <div style="display:flex;gap:6px;flex-shrink:0">
+      ${editBtn}
+      ${exportBtn}
+    </div>
+  </div>`;
+}
+
+function archiveLoadToPrep(dateStr, source, archiveIdx) {
+  if (!editMode) { alertLock(); return; }
+  let vac = null;
+  if (source === 'planning') {
+    vac = getPrevVac(dateStr) || (prevVacations||[]).find(v=>(v.dateStr||v.date||'')=== dateStr);
+  } else if (archiveIdx !== null && archives[archiveIdx]) {
+    const a = archives[archiveIdx];
+    vac = { routes: a.routesData||[], postes: a.postesData||{}, missions: a.missions||[] };
+  }
+  if (!vac) return;
+
+  routesData.length = 0;
+  (vac.routes||[]).forEach(r => routesData.push(JSON.parse(JSON.stringify(r))));
+  if (vac.postes) {
+    Object.keys(postesData).forEach(k => { postesData[k] = []; });
+    Object.assign(postesData, JSON.parse(JSON.stringify(vac.postes)));
+  }
+
+  // Convertir dateStr DD/MM/YYYY → YYYY-MM-DD
+  const p = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  const isoDate = p ? `${p[3]}-${p[2]}-${p[1]}` : '';
+
+  showTab('preparee');
+  const picker = document.getElementById('prep-date-picker');
+  if (picker && isoDate) {
+    picker.value = isoDate;
+    document.getElementById('prep-date-status').innerHTML =
+      `<span style="color:#6ee7b7">✓ Vacation du ${dateStr} chargée depuis les archives</span>`;
+  }
+  renderPrepVacation();
+}
+
+function exportAllArchives() {
+  const all = {
+    prevVacations: prevVacations || [],
+    archives: archives || [],
+    exportedAt: new Date().toLocaleString('fr-FR'),
+  };
+  const blob = new Blob([JSON.stringify(all, null, 2)], { type:'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `archives_planning_${new Date().toLocaleDateString('fr-FR').replace(/\//g,'-')}.json`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 document.querySelectorAll('.modal-overlay').forEach(m => {
@@ -4633,33 +4838,56 @@ function prevGetDays(n) {
   return days;
 }
 
+function planningGoToday() {
+  const today = new Date().toLocaleDateString('fr-FR');
+  prevSelectDay(today);
+}
+
 function renderPrevCalendar() {
   const strip = document.getElementById('prev-calendar-strip');
   if (!strip) return;
-  const days = prevGetDays(20);
+
+  // Afficher -15 jours à +30 jours autour d'aujourd'hui
+  const today = new Date();
+  const days = [];
+  for (let i = -15; i <= 30; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    const dateStr = d.toLocaleDateString('fr-FR');
+    const jours = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+    const mois  = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+    days.push({
+      dateStr,
+      num:     d.getDate(),
+      jourNom: jours[d.getDay()],
+      mois:    mois[d.getMonth()],
+      isToday: i === 0,
+    });
+  }
+
   strip.innerHTML = days.map(day => {
     const vac = getPrevVac(day.dateStr);
-    const hasData = vac && (
-      (vac.routes && vac.routes.some(r => r.membres && r.membres.length)) ||
-      (vac.postes && (vac.postes.accueil.length || vac.postes.csu.length || vac.postes.chefposte.length))
-    );
-    const isToday = day.dateStr === new Date().toLocaleDateString('fr-FR');
+    const hasData = !!(vac && vac.routes && vac.routes.some(r => r.membres && r.membres.length > 0));
     const isActive = prevSelectedDate === day.dateStr;
     return `<button onclick="prevSelectDay('${day.dateStr}')"
       style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:3px;
-        padding:10px 14px;border-radius:11px;cursor:pointer;transition:all .18s;
-        font-family:'Inter',sans-serif;min-width:62px;
-        background:${isActive ? 'rgba(192,132,252,0.22)' : 'var(--card-bg)'};
-        border:1px solid ${isActive ? 'rgba(192,132,252,0.55)' : isToday ? 'rgba(192,132,252,0.3)' : 'var(--border)'};
+        padding:8px 12px;border-radius:10px;cursor:pointer;transition:all .15s;
+        font-family:'Inter',sans-serif;min-width:56px;
+        background:${isActive ? 'rgba(192,132,252,.22)' : 'var(--surface)'};
+        border:1px solid ${isActive ? 'rgba(192,132,252,.55)' : day.isToday ? 'rgba(192,132,252,.35)' : 'var(--border)'};
       ">
-      <span style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;
-        color:${isActive ? '#e9d5ff' : isToday ? '#c084fc' : 'var(--text-muted)'};font-weight:600">${day.jourNom}</span>
-      <span style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;
-        color:${isActive ? '#c084fc' : isToday ? '#a855f7' : 'var(--text-primary)'}">${day.num}</span>
-      <span style="font-size:10px;color:${isActive?'#e9d5ff':'var(--text-muted)'}">${day.mois}</span>
-      ${hasData ? `<span style="width:6px;height:6px;border-radius:50%;background:#34d399;margin-top:2px;box-shadow:0 0 5px #34d399"></span>` : `<span style="width:6px;height:6px"></span>`}
+      <span style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:${isActive?'#e9d5ff':day.isToday?'#c084fc':'var(--text-3)'};font-weight:600">${day.jourNom}</span>
+      <span style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:${isActive?'#c084fc':day.isToday?'#a855f7':'var(--text-primary)'}">${day.num}</span>
+      <span style="font-size:9px;color:${isActive?'#e9d5ff':'var(--text-3)'}">${day.mois}</span>
+      <span style="width:6px;height:6px;border-radius:50%;margin-top:2px;background:${hasData?'#34d399':'transparent'};${hasData?'box-shadow:0 0 5px #34d399':''}"></span>
     </button>`;
   }).join('');
+
+  // Scroller jusqu'à aujourd'hui
+  setTimeout(() => {
+    const todayBtn = strip.children[15]; // index 15 = aujourd'hui
+    if (todayBtn) todayBtn.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' });
+  }, 50);
 }
 
 function prevSelectDay(dateStr) {
@@ -4752,82 +4980,157 @@ function renderPrevDayContainer() {
   if (!el) return;
 
   if (!prevSelectedDate) {
-    el.innerHTML = `<div style="text-align:center;padding:60px;color:var(--text-muted);font-size:13px">
-      <div style="font-size:40px;margin-bottom:14px">📅</div>
-      Cliquez sur un jour dans le calendrier pour planifier une vacation à l'avance.
+    el.innerHTML = `<div style="text-align:center;padding:60px;color:var(--text-2);font-size:13px">
+      <div style="font-size:40px;margin-bottom:12px">📅</div>
+      Cliquez sur un jour pour voir la vacation enregistrée.
     </div>`;
     return;
   }
 
   const vac = getPrevVac(prevSelectedDate);
-  if (!vac) {
-    const isToday = prevSelectedDate === new Date().toLocaleDateString('fr-FR');
-    el.innerHTML = `<div style="text-align:center;padding:60px;color:var(--text-muted);font-size:13px">
-      <div style="font-size:40px;margin-bottom:14px">📋</div>
-      <div style="margin-bottom:20px">Aucune vacation planifiée pour le <strong style="color:#c084fc">${prevSelectedDate}</strong></div>
-      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-        <button class="add-btn" style="background:rgba(192,132,252,0.18);border-color:rgba(192,132,252,0.45);color:#c084fc;padding:9px 18px;font-size:13px" onclick="prevAddVacation()">+ Créer une vacation vide</button>
-        ${!isToday ? `<button class="add-btn" style="background:rgba(52,211,153,0.12);border-color:rgba(52,211,153,0.35);color:#34d399;padding:9px 18px;font-size:13px" onclick="prevCopyToday()">↳ Copier la vacation du jour</button>` : ''}
+
+  if (!vac || !vac.routes || !vac.routes.some(r => r.membres && r.membres.length > 0)) {
+    el.innerHTML = `<div style="text-align:center;padding:48px;color:var(--text-2);font-size:13px">
+      <div style="font-size:36px;margin-bottom:10px">📋</div>
+      <div>Aucune vacation enregistrée pour le <strong style="color:#c084fc">${prevSelectedDate}</strong></div>
+      <div style="margin-top:12px;font-size:12px;color:var(--text-3)">
+        Pour créer ou modifier une vacation, utilisez l'onglet <strong>Création/Modification vacation</strong>
       </div>
     </div>`;
     return;
   }
 
-  // Section tabs
-  const sectionTabs = [
-    { id:'routes',    icon:'🚔', label:'Feuilles de route', count: vac.routes ? vac.routes.filter(r=>r.membres&&r.membres.length).length : 0 },
-    { id:'accueil',   icon:'🏠', label:'Accueil',           count: vac.postes.accueil.filter(e=>e.nom).length },
-    { id:'csu',       icon:'📡', label:'CSU',               count: vac.postes.csu.filter(e=>e.nom).length },
-    { id:'chefposte', icon:'⭐', label:'Chef de Poste',     count: vac.postes.chefposte.filter(e=>e.nom).length },
-    { id:'csu-sheet', icon:'🎥', label:'Feuille CSU',       count: '' },
-  ];
+  // En-tête
+  const savedBy  = vac.savedBy  || '—';
+  const savedAt  = vac.savedAt  || '';
+  const nbEquip  = vac.routes.filter(r => r.membres && r.membres.length > 0).length;
+  const nbAgents = new Set(vac.routes.flatMap(r => (r.membres||[]).map(m => m.n))).size;
 
-  const tabsHtml = sectionTabs.map(t => `
-    <button onclick="prevSetSection('${t.id}')"
-      style="display:flex;align-items:center;gap:7px;padding:8px 16px;border-radius:8px;cursor:pointer;
-        font-size:13px;font-weight:500;font-family:'Inter',sans-serif;transition:all .15s;white-space:nowrap;
-        background:${prevActiveSection===t.id ? 'rgba(192,132,252,0.22)' : 'transparent'};
-        border:1px solid ${prevActiveSection===t.id ? 'rgba(192,132,252,0.5)' : 'var(--border)'};
-        color:${prevActiveSection===t.id ? '#c084fc' : 'var(--text-secondary)'};">
-      ${t.icon} ${t.label}
-      ${t.count !== '' ? `<span style="background:rgba(192,132,252,0.2);color:#c084fc;border-radius:12px;padding:1px 7px;font-size:11px;font-weight:700">${t.count}</span>` : ''}
-    </button>`).join('');
-
-  el.innerHTML = `
-    <!-- En-tête vacation -->
-    <div style="background:var(--card-bg);border:1px solid rgba(192,132,252,0.3);border-radius:14px;padding:18px 22px;margin-bottom:14px;backdrop-filter:blur(8px)">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-        <div>
-          <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:#c084fc">📅 ${prevSelectedDate}</div>
-          <div style="font-size:12px;color:var(--text-muted);margin-top:3px">Vacation — ${vac.shift || '06H45 — 17H15'}</div>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <button onclick="prevCopyToday()" style="background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.3);color:#34d399;padding:6px 14px;border-radius:7px;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif">↳ Écraser avec vacation du jour</button>
-          <button onclick="prevDeleteVacation('${prevSelectedDate}')" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#fca5a5;padding:6px 14px;border-radius:7px;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif">✕ Supprimer</button>
+  // Équipages
+  const equipCards = (vac.routes || []).map(r => {
+    if (!r.membres || !r.membres.length) return '';
+    const pr = PAUSES_REPAS.find(p => p.id === r.repas);
+    const membres = r.membres.map(m => {
+      const isChef = m.n === r.chef;
+      return `<div style="display:flex;align-items:center;gap:7px;padding:4px 0;border-bottom:1px solid var(--border)">
+        <div class="agent-avatar ${isChef?'avatar-amber':'avatar-blue'}" style="width:24px;height:24px;font-size:9px">${initials(m.n||'?')}</div>
+        <span style="font-size:12px;font-weight:${isChef?'600':'400'};color:${isChef?'var(--amber)':'var(--text-1)'}">${m.n}${isChef?' ★':''}</span>
+        <span style="font-size:10px;color:var(--text-3);margin-left:auto">mat.${m.m||'—'}</span>
+      </div>`;
+    }).join('');
+    const zones = (r.zones||[]).map(z=>`<span class="badge badge-cyan" style="font-size:10px">${z}</span>`).join('');
+    return `<div class="route-card">
+      <div class="route-header">
+        <span class="route-title">${r.id}</span>
+        <div style="display:flex;gap:4px;flex-wrap:wrap">
+          ${r.role?`<span class="badge badge-amber" style="font-size:10px">${r.role}</span>`:''}
+          ${r.fourriere?`<span class="badge badge-amber" style="font-size:10px">🚗</span>`:''}
+          ${pr?`<span class="badge ${pr.badge}" style="font-size:10px">${pr.id}</span>`:''}
         </div>
       </div>
-      <!-- Notes generales -->
-      <textarea placeholder="Notes générales pour cette vacation…" oninput="prevUpdateNotes(this.value)"
-        style="margin-top:12px;width:100%;background:rgba(255,255,255,0.03);border:1px solid rgba(192,132,252,0.25);color:var(--text-secondary);padding:8px 12px;border-radius:8px;font-size:12px;font-family:'Inter',sans-serif;outline:none;resize:vertical;min-height:52px"
-      >${vac.notes || ''}</textarea>
+      <div class="route-body">
+        <div class="route-membres">${membres}</div>
+        ${zones?`<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">${zones}</div>`:''}
+        ${r.consignes?`<div class="route-consignes" style="margin-top:6px;font-size:11px">${r.consignes.replace(/\n/g,'<br>')}</div>`:''}
+      </div>
+    </div>`;
+  }).filter(Boolean).join('');
+
+  // Postes fixes
+  const posteTypes = [
+    { key:'accueil',   label:'🏠 Accueil',      color:'#a78bfa' },
+    { key:'csu',       label:'📡 CSU',           color:'#34d399' },
+    { key:'chefposte', label:'⭐ Chef de Poste', color:'#f87171' },
+  ];
+  const postesHTML = posteTypes.map(p => {
+    const list = (vac.postes?.[p.key]||[]).filter(e=>e.nom);
+    if (!list.length) return '';
+    return `<div class="post-section" style="padding:10px 14px;margin-bottom:0">
+      <div style="font-size:12px;font-weight:700;color:${p.color};margin-bottom:7px">${p.label}</div>
+      ${list.map(e=>{
+        const pr2 = PAUSES_REPAS.find(pp=>pp.id===e.repas);
+        return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0">
+          <div class="post-agent-avatar" style="background:${p.color}22;color:${p.color}">${initials(e.nom||'?')}</div>
+          <span style="font-size:13px">${e.nom}${e.chefSalle?' ★':''}</span>
+          ${pr2?`<span class="badge badge-gray" style="font-size:10px;margin-left:auto">${pr2.id}</span>`:''}
+        </div>`;
+      }).join('')}
+    </div>`;
+  }).filter(Boolean).join('');
+
+  el.innerHTML = `
+    <div style="background:var(--surface);border:1px solid rgba(192,132,252,.3);border-radius:var(--radius);padding:14px 18px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:#c084fc">📅 ${prevSelectedDate}</div>
+        <div style="font-size:11px;color:var(--text-2);margin-top:2px">${nbEquip} équipage(s) · ${nbAgents} agent(s)${savedBy!=='—'?' · Enregistré par '+savedBy:''}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${editMode?`<button onclick="planningLoadToPrep('${prevSelectedDate}')" style="background:rgba(192,132,252,.15);border:1px solid rgba(192,132,252,.4);color:#c084fc;padding:6px 14px;border-radius:var(--radius-sm);font-size:12px;cursor:pointer;font-family:'Inter',sans-serif">✏ Modifier dans Création/Modification</button>`:''}
+        <button onclick="planningPrintDay('${prevSelectedDate}')" style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);color:#fbbf24;padding:6px 14px;border-radius:var(--radius-sm);font-size:12px;cursor:pointer;font-family:'Inter',sans-serif">🖨 Imprimer</button>
+      </div>
     </div>
 
-    <!-- Tabs sections -->
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border)">
-      ${tabsHtml}
-    </div>
+    <div class="section-title">Équipages</div>
+    <div class="route-grid" style="margin-bottom:16px">${equipCards || '<div style="color:var(--text-2);font-size:13px">Aucun équipage</div>'}</div>
 
-    <!-- Contenu section active -->
-    <div id="prev-section-content"></div>
+    ${postesHTML ? `<div class="section-title">Postes fixes</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:16px">${postesHTML}</div>` : ''}
   `;
-
-  renderPrevSection();
 }
 
 function prevSetSection(section) {
   prevActiveSection = section;
-  // Re-render only tabs + section content for perf
   renderPrevDayContainer();
+}
+
+// Charger une vacation du planning dans l'onglet Création/Modification
+function planningLoadToPrep(dateStr) {
+  if (!editMode) { alertLock(); return; }
+  const vac = getPrevVac(dateStr);
+  if (!vac) return;
+
+  // Convertir dateStr DD/MM/YYYY → YYYY-MM-DD pour le picker
+  const parts = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  const isoDate = parts ? `${parts[3]}-${parts[2]}-${parts[1]}` : '';
+
+  // Charger dans routesData
+  routesData.length = 0;
+  (vac.routes||[]).forEach(r => routesData.push(JSON.parse(JSON.stringify(r))));
+  if (vac.postes) {
+    Object.keys(postesData).forEach(k => { postesData[k] = []; });
+    Object.assign(postesData, JSON.parse(JSON.stringify(vac.postes)));
+  }
+
+  // Aller sur l'onglet Création/Modification et sélectionner la date
+  showTab('preparee');
+  const picker = document.getElementById('prep-date-picker');
+  if (picker && isoDate) {
+    picker.value = isoDate;
+    document.getElementById('prep-date-status').innerHTML =
+      `<span style="color:#6ee7b7">✓ Vacation du ${dateStr} chargée pour modification</span>`;
+  }
+  renderPrepVacation();
+}
+
+// Imprimer la vacation d'un jour du planning
+function planningPrintDay(dateStr) {
+  const vac = getPrevVac(dateStr);
+  if (!vac) return;
+
+  // Sauvegarder routesData temporairement et utiliser ceux de la vacation
+  const tmpRoutes = JSON.parse(JSON.stringify(routesData));
+  const tmpPostes = JSON.parse(JSON.stringify(postesData));
+
+  routesData.length = 0;
+  (vac.routes||[]).forEach(r => routesData.push(r));
+  Object.assign(postesData, vac.postes || {});
+
+  printPrepOverview();
+
+  // Restaurer
+  routesData.length = 0;
+  tmpRoutes.forEach(r => routesData.push(r));
+  Object.assign(postesData, tmpPostes);
 }
 
 function prevUpdateNotes(val) {
