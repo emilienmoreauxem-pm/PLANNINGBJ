@@ -1490,6 +1490,29 @@ const PHONES = {
   'TEL03': { label: 'Tél. N°03', num: '07 78 17 05 09' },
 };
 
+// Utilitaire : date → DD/MM/YYYY avec zéros (format canonique)
+function normDate(d) {
+  if (!d) return '';
+  if (typeof d === 'string') {
+    // Déjà DD/MM/YYYY ou D/MM/YYYY → normaliser
+    const p = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (p) return `${p[1].padStart(2,'0')}/${p[2].padStart(2,'0')}/${p[3]}`;
+    // YYYY-MM-DD
+    const p2 = d.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (p2) return `${p2[3]}/${p2[2]}/${p2[1]}`;
+    return d;
+  }
+  // Date object
+  return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+}
+
+// Utilitaire : picker value (YYYY-MM-DD) → DD/MM/YYYY normalisé
+function pickerToFR(val) {
+  if (!val) return '';
+  const [y,m,d] = val.split('-');
+  return `${d.padStart(2,'0')}/${m.padStart(2,'0')}/${y}`;
+}
+
 const STORAGE_KEY = 'pm_planning_v1';
 
 function saveData() {
@@ -1529,8 +1552,7 @@ function _autoSaveToPlanning() {
     // Ne pas sauvegarder si aucun équipage (évite d'écraser avec un brouillon vide)
     if (!routesData.length) return;
 
-    const [y, m, d] = dateVal.split('-');
-    const dateFormatted = `${d}/${m}/${y}`;
+    const dateFormatted = pickerToFR(dateVal);
 
     if (!prevVacations) window.prevVacations = [];
 
@@ -1691,7 +1713,7 @@ function renderVacationJour(targetISO) {
   // Date affichée
   const dateObj   = new Date(useISO + 'T12:00:00');
   const dateLabel = dateObj.toLocaleDateString('fr-FR', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
-  const todayShort = dateObj.toLocaleDateString('fr-FR'); // DD/MM/YYYY
+  const todayShort = normDate(dateObj); // DD/MM/YYYY normalisé
   const dateEl = document.getElementById('aujourdhui-date');
   if (dateEl) dateEl.textContent = dateLabel.charAt(0).toUpperCase() + dateLabel.slice(1);
 
@@ -1824,13 +1846,12 @@ function onPrepDateChange(dateVal) {
   const statusEl = document.getElementById('prep-date-status');
   if (!dateVal) { renderPrepVacation(); return; }
 
-  const [y, m, d] = dateVal.split('-');
-  const dateFormatted = `${d}/${m}/${y}`;
+  const dateFormatted = pickerToFR(dateVal);
 
   // Chercher si une vacation existe pour cette date dans prevVacations
   const existing = (prevVacations || []).find(v => {
     const vd = v.dateStr || v.date || '';
-    return vd === dateFormatted || vd === dateVal;
+    return normDate(vd) === dateFormatted;
   });
 
   if (existing) {
@@ -1986,14 +2007,13 @@ function savePrepToPlanning() {
   if (!dateVal) { alert('Sélectionnez une date pour la création/modification vacation.'); return; }
 
   // Formater la date en DD/MM/YYYY
-  const [y, m, d] = dateVal.split('-');
-  const dateFormatted = `${d}/${m}/${y}`;
+  const dateFormatted = pickerToFR(dateVal);
 
   // Mettre à jour la date sur toutes les feuilles de route
   routesData.forEach(r => { if (!r.date) r.date = dateFormatted; });
 
   // Vérifier si une entrée existe déjà pour cette date dans le planning
-  const existingIdx = prevVacations ? prevVacations.findIndex(v => v.date === dateFormatted) : -1;
+  const existingIdx = prevVacations ? prevVacations.findIndex(v => normDate(v.dateStr || v.date || '') === dateFormatted) : -1;
 
   const snapshot = {
     date:    dateFormatted,
@@ -3792,7 +3812,7 @@ let archives = JSON.parse(localStorage.getItem('pm_archives') || '[]');
 
 function saveCurrentVacation() {
   const shift = document.querySelector('.shift-badge').textContent.trim();
-  const dateLabel = new Date().toLocaleDateString('fr-FR');
+  const dateLabel = normDate(new Date());
 
   // Vérifier si une archive pour ce jour existe déjà
   const existing = archives.findIndex(a => a.date === dateLabel && a.shift === shift);
@@ -4832,9 +4852,10 @@ function savePrevData() {
 
 function getPrevVac(dateStr) {
   if (!dateStr || !prevVacations) return null;
+  const norm = normDate(dateStr);
   return prevVacations.find(v => {
     const d = v.dateStr || v.date || '';
-    return d === dateStr;
+    return normDate(d) === norm;
   });
 }
 
@@ -4852,7 +4873,7 @@ function prevGetDays(n) {
       jourNom: jours[clone.getDay()],
       num: clone.getDate(),
       mois: mois[clone.getMonth()],
-      dateStr: clone.toLocaleDateString('fr-FR')
+      dateStr: normDate(clone)
     });
     d.setDate(d.getDate() + 1);
   }
@@ -4860,7 +4881,7 @@ function prevGetDays(n) {
 }
 
 function planningGoToday() {
-  const today = new Date().toLocaleDateString('fr-FR');
+  const today = normDate(new Date());
   prevSelectDay(today);
 }
 
@@ -4874,7 +4895,7 @@ function renderPrevCalendar() {
   for (let i = -15; i <= 30; i++) {
     const d = new Date(today);
     d.setDate(today.getDate() + i);
-    const dateStr = d.toLocaleDateString('fr-FR');
+    const dateStr = normDate(d); // format canonique DD/MM/YYYY avec zéros
     const jours = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
     const mois  = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
     days.push({
@@ -6030,7 +6051,7 @@ function buildPrintPreview() {
   const showPauses   = document.getElementById('print-show-pauses')?.checked ?? true;
 
   // Chercher la vacation enregistrée pour aujourd'hui
-  const todayShort = new Date().toLocaleDateString('fr-FR');
+  const todayShort = normDate(new Date());
   const todayISO   = new Date().toISOString().split('T')[0];
   const vacAujourdhui = (prevVacations || []).find(v => {
     const d = v.dateStr || v.date || '';
@@ -6578,7 +6599,7 @@ function printSingleRoute(idx) {
 
 function printTodayAllRoutes() {
   // Chercher la vacation du jour
-  const todayShort = new Date().toLocaleDateString('fr-FR');
+  const todayShort = normDate(new Date());
   const todayISO   = new Date().toISOString().split('T')[0];
   const vac = (prevVacations || []).find(v => {
     const d = v.dateStr || v.date || '';
