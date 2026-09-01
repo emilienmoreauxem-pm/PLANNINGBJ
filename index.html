@@ -3927,10 +3927,10 @@ function restoreArchive(idx) {
 
 function renderArchives() {
   const container = document.getElementById('archivesList');
+  if (!container) return; // onglet pas encore visible
   const statsEl   = document.getElementById('archives-stats');
   const yearSel   = document.getElementById('archives-year-filter');
   const monthSel  = document.getElementById('archives-month-filter');
-  if (!container) return;
 
   // ── Fusionner sources : prevVacations + archives manuelles ─
   const parseDate = str => {
@@ -6618,10 +6618,9 @@ function doPrint() {
 
 window._appData = { routesData, missions, agents, regularMissions, postesData, csuData, prevVacations };
 window._appRender = function() {
-  renderDashboard();
+  renderVacationJour();
   renderEquipagesTab();
   renderPersonnel();
-  renderVacationJour();
   renderMissions();
   renderRoutes();
   renderAgents();
