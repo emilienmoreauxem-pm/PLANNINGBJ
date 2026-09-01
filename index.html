@@ -2036,9 +2036,8 @@ function _renderPrepRouteCard(r, idx) {
     </div>`;
   }).join('') : '<div style="font-size:12px;color:var(--text-2);padding:4px 0">Aucun agent</div>';
 
-  const pr = PAUSES_REPAS.find(p => p.id === r.repas);
-
-  const zonesHTML = (r.zones||[]).length
+  const pr    = PAUSES_REPAS.find(p => p.id === r.repas);
+  const phone = r.telephone ? PHONES[r.telephone] : null;
     ? `<div class="route-section-title">Zones</div>
        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:2px">${r.zones.map(z=>`<span class="badge badge-cyan">${z}</span>`).join('')}</div>`
     : '';
@@ -2130,6 +2129,7 @@ function _renderPrepRouteCard(r, idx) {
         ${r.role ? `<span class="badge badge-amber">${r.role}</span>` : ''}
         ${r.fourriere ? `<span class="badge badge-amber">🚗</span>` : ''}
         ${pr ? `<span class="badge ${pr.badge}">${pr.id}</span>` : ''}
+        ${phone ? `<span class="badge badge-green" style="font-size:10px">📱 ${phone.label}</span>` : ''}
         ${printBtn}
         ${editBtns}
       </div>
@@ -2489,7 +2489,13 @@ function deleteMission(idx) {
   ];
 
   // Pauses repas (données depuis le planning Excel officiel)
-  const PAUSES_REPAS = [
+  const PHONES = {
+  'TEL01': { label: 'Tél. N°01', num: '06 30 82 81 42' },
+  'TEL02': { label: 'Tél. N°02', num: '06 77 83 59 40' },
+  'TEL03': { label: 'Tél. N°03', num: '07 78 17 05 09' },
+};
+
+const PAUSES_REPAS = [
     { id:"PR 1", label:"PR 1 — 12h00/12h45", midi:"12h00 / 12h45", badge:"badge-blue"  },
     { id:"PR 2", label:"PR 2 — 12h45/13h30", midi:"12h45 / 13h30", badge:"badge-cyan"  },
     { id:"PR 3", label:"PR 3 — 13h30/14h15", midi:"13h30 / 14h15", badge:"badge-amber" },
@@ -2568,6 +2574,7 @@ function _matchAgentToPlanning(agentNom, planningList) {
     document.getElementById('re-repas').value = r.repas || '—';
     document.getElementById('re-role').value = r.role || '';
     document.getElementById('re-fourriere').checked = !!r.fourriere;
+    document.getElementById('re-telephone').value = r.telephone || '';
     document.getElementById('re-consignes').value = r.consignes;
     // Zones multi-select
     const zonesEl = document.getElementById('re-zones');
@@ -3028,6 +3035,7 @@ function _matchAgentToPlanning(agentNom, planningList) {
     r.repas = document.getElementById('re-repas').value || '—';
     r.role = document.getElementById('re-role').value;
     r.fourriere = document.getElementById('re-fourriere').checked;
+    r.telephone = document.getElementById('re-telephone').value || '';
     r.consignes = document.getElementById('re-consignes').value;
     // Zones multi-select
     const zonesEl = document.getElementById('re-zones');
@@ -6243,23 +6251,26 @@ function _openPrintWindow(htmlBody, title) {
 }
 
 function _routeToHTML(r) {
-  const pr = PAUSES_REPAS.find(p => p.id === r.repas);
+  const pr    = PAUSES_REPAS.find(p => p.id === r.repas);
+  const phone = r.telephone ? PHONES[r.telephone] : null;
+
   const membres = r.membres.length
     ? r.membres.map(m => {
         const isChef = m.n === r.chef;
         const inits = m.n.split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
         return `<div class="agent-row">
-          <div class="avatar">${inits}</div>
-          <span style="font-weight:${isChef?'700':'400'}">${m.n}${isChef?'<span class="chef-star"> ★ Chef</span>':''}</span>
+          <div class="avatar" style="background:${isChef?'#fef3c7':'#eff6ff'};color:${isChef?'#92400e':'#1e40af'}">${inits}</div>
+          <span style="font-weight:${isChef?'700':'400'}">${m.n}${isChef?'<span style="color:#92400e;font-size:10px"> ★ Chef</span>':''}</span>
           <span style="font-size:10px;color:#94a3b8;margin-left:auto">Mat. ${m.m||'—'}</span>
         </div>`;
       }).join('')
     : '<div style="font-size:11px;color:#94a3b8;padding:4px 0">Aucun agent</div>';
 
   const badges = [
-    r.role ? `<span class="badge badge-amber">${r.role}</span>` : '',
+    r.role      ? `<span class="badge badge-amber">${r.role}</span>` : '',
     r.fourriere ? `<span class="badge badge-amber">🚗 Fourrière</span>` : '',
-    pr ? `<span class="badge badge-blue">${pr.id} — ${pr.midi}</span>` : '',
+    pr          ? `<span class="badge badge-blue">${pr.id} — ${pr.midi}</span>` : '',
+    phone       ? `<span class="badge badge-green">📱 ${phone.label} — ${phone.num}</span>` : '',
     ...(r.zones||[]).map(z=>`<span class="badge badge-green">${z}</span>`),
   ].filter(Boolean).join('');
 
@@ -6279,10 +6290,48 @@ function _routeToHTML(r) {
   const consigne = r.consignes
     ? `<div class="section-label">Consignes</div><div class="consigne">${r.consignes.replace(/\n/g,'<br>')}</div>` : '';
 
+  const bilanTable = `
+    <div style="margin-top:12px;padding-top:10px;border-top:1px solid #e2e8f0">
+      <div class="section-label" style="margin-bottom:5px">Bilan d'activité</div>
+      <table style="width:100%;border-collapse:collapse;font-size:10px">
+        <thead>
+          <tr style="background:#f1f5f9">
+            <th style="border:1px solid #cbd5e1;padding:4px 8px;text-align:left;font-size:9px;color:#475569;font-weight:600;text-transform:uppercase">Catégorie</th>
+            <th style="border:1px solid #cbd5e1;padding:4px 8px;text-align:center;width:55px;font-size:9px;color:#475569;font-weight:600;text-transform:uppercase">Nbre</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${[
+            'PV Code de la Route',
+            'PV Stationnement',
+            'PV A4 — Non-respect des arrêtés municipaux',
+            'MAD — Mise à disposition / Interventions',
+          ].map((label,i) => `<tr${i%2?' style="background:#f8fafc"':''}>
+            <td style="border:1px solid #cbd5e1;padding:5px 8px">${label}</td>
+            <td style="border:1px solid #cbd5e1;padding:5px 8px;height:20px"></td>
+          </tr>`).join('')}
+          <tr>
+            <td style="border:1px solid #cbd5e1;padding:5px 8px;font-weight:700;color:#1e40af">TOTAL</td>
+            <td style="border:1px solid #cbd5e1;padding:5px 8px;height:20px"></td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="margin-top:8px;display:flex;gap:16px">
+        <div style="flex:1">
+          <div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Signature chef d'équipage</div>
+          <div style="height:32px;border-bottom:1px solid #94a3b8"></div>
+        </div>
+        <div style="flex:1">
+          <div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Observations</div>
+          <div style="height:32px;border-bottom:1px solid #94a3b8"></div>
+        </div>
+      </div>
+    </div>`;
+
   return `<div class="route-card">
     <div class="route-header">
       <span class="route-id">${r.id}</span>
-      <div>${badges}</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap">${badges}</div>
     </div>
     <div class="route-body">
       <div class="section-label">Équipage</div>
@@ -6290,6 +6339,7 @@ function _routeToHTML(r) {
       ${consigne}
       ${regMiss}
       ${specMiss}
+      ${bilanTable}
     </div>
   </div>`;
 }
@@ -6820,6 +6870,15 @@ if (_hadSaved) {
             <option value="DAM">DAM — Dernier au désarmement</option>
           </select>
         </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">📱 Téléphone de service</label>
+        <select class="form-select" id="re-telephone">
+          <option value="">— Aucun téléphone —</option>
+          <option value="TEL01">Téléphone N°01 — 06 30 82 81 42</option>
+          <option value="TEL02">Téléphone N°02 — 06 77 83 59 40</option>
+          <option value="TEL03">Téléphone N°03 — 07 78 17 05 09</option>
+        </select>
       </div>
       <div class="form-group">
         <label class="form-label" style="display:flex;align-items:center;gap:10px">
