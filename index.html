@@ -1536,6 +1536,7 @@ function _autoSaveToPlanning() {
 
     const snapshot = {
       date:     dateFormatted,
+      dateStr:  dateFormatted,
       routes:   JSON.parse(JSON.stringify(routesData)),
       postes:   JSON.parse(JSON.stringify(postesData)),
       missions: JSON.parse(JSON.stringify(regularMissions)),
@@ -1556,10 +1557,14 @@ function _autoSaveToPlanning() {
       prevVacations.unshift(snapshot);
     }
 
-    const statusEl = document.getElementById('prep-date-status');
     if (statusEl) {
       const t = new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
       statusEl.innerHTML = `<span style="font-size:10px;color:var(--text-3)">● Auto-enregistré ${t}</span>`;
+    }
+
+    // Rafraîchir le calendrier planning si l'onglet est visible
+    if (document.getElementById('tab-planning')?.classList.contains('active')) {
+      renderPrevCalendar();
     }
   }, 1500);
 }
@@ -1991,8 +1996,9 @@ function savePrepToPlanning() {
   const existingIdx = prevVacations ? prevVacations.findIndex(v => v.date === dateFormatted) : -1;
 
   const snapshot = {
-    date: dateFormatted,
-    routes: JSON.parse(JSON.stringify(routesData)),
+    date:    dateFormatted,
+    dateStr: dateFormatted,
+    routes:  JSON.parse(JSON.stringify(routesData)),
     postes: JSON.parse(JSON.stringify(postesData)),
     missions: JSON.parse(JSON.stringify(regularMissions)),
     savedAt: new Date().toLocaleString('fr-FR'),
@@ -2008,6 +2014,7 @@ function savePrepToPlanning() {
 
   logAction('ajout', `Vacation enregistrée dans le planning`, `Date : ${dateFormatted} · ${routesData.length} équipage(s)`);
   saveData();
+  renderPrevCalendar(); // Mettre à jour les points verts du calendrier
 
   // Feedback visuel sur le bouton dédié
   const saveBtn = document.getElementById('prep-save-btn');
@@ -4824,7 +4831,11 @@ function savePrevData() {
 }
 
 function getPrevVac(dateStr) {
-  return prevVacations.find(v => v.dateStr === dateStr);
+  if (!dateStr || !prevVacations) return null;
+  return prevVacations.find(v => {
+    const d = v.dateStr || v.date || '';
+    return d === dateStr;
+  });
 }
 
 // ── Calendrier bande ──────────────────────────────────────
