@@ -1484,6 +1484,12 @@ const equipages = [
 //  SAUVEGARDE AUTOMATIQUE (localStorage)
 // ════════════════════════════════════════════
 
+const PHONES = {
+  'TEL01': { label: 'Tél. N°01', num: '06 30 82 81 42' },
+  'TEL02': { label: 'Tél. N°02', num: '06 77 83 59 40' },
+  'TEL03': { label: 'Tél. N°03', num: '07 78 17 05 09' },
+};
+
 const STORAGE_KEY = 'pm_planning_v1';
 
 function saveData() {
@@ -2038,6 +2044,8 @@ function _renderPrepRouteCard(r, idx) {
 
   const pr    = PAUSES_REPAS.find(p => p.id === r.repas);
   const phone = r.telephone ? PHONES[r.telephone] : null;
+
+  const zonesHTML = (r.zones||[]).length
     ? `<div class="route-section-title">Zones</div>
        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:2px">${r.zones.map(z=>`<span class="badge badge-cyan">${z}</span>`).join('')}</div>`
     : '';
@@ -2488,13 +2496,7 @@ function deleteMission(idx) {
     "Fourrière", "Île de la Jatte", "Pont de Neuilly"
   ];
 
-  // Pauses repas (données depuis le planning Excel officiel)
-  const PHONES = {
-  'TEL01': { label: 'Tél. N°01', num: '06 30 82 81 42' },
-  'TEL02': { label: 'Tél. N°02', num: '06 77 83 59 40' },
-  'TEL03': { label: 'Tél. N°03', num: '07 78 17 05 09' },
-};
-
+  // Pauses repas
 const PAUSES_REPAS = [
     { id:"PR 1", label:"PR 1 — 12h00/12h45", midi:"12h00 / 12h45", badge:"badge-blue"  },
     { id:"PR 2", label:"PR 2 — 12h45/13h30", midi:"12h45 / 13h30", badge:"badge-cyan"  },
