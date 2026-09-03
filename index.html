@@ -2969,102 +2969,64 @@ function _matchAgentToPlanning(agentNom, planningList) {
   function _parseOneSheet(rowsRaw, rowsFmt) {
     if (!rowsRaw || rowsRaw.length < 3) return;
 
-    // ── Trouver le mois/année du feuillet ─────────────────────
+    // Trouver mois/annee depuis col A ligne 0 ou 1
     let sheetYear = null, sheetMonth = null;
     for (let ri = 0; ri < Math.min(4, rowsRaw.length); ri++) {
       for (let ci = 0; ci < Math.min(35, (rowsRaw[ri]||[]).length); ci++) {
         const v = rowsRaw[ri][ci];
-        if (v instanceof Date && !isNaN(v.getTime()) && v.getFullYear() >= 2020) {
-          sheetYear  = v.getFullYear();
-          sheetMonth = v.getMonth() + 1;
-          break;
+        if (v instanceof Date && !isNaN(v) && v.getFullYear() >= 2020) {
+          sheetYear = v.getFullYear(); sheetMonth = v.getMonth()+1; break;
         }
       }
       if (sheetYear) break;
     }
     if (!sheetYear) return;
 
-    // ── Trouver la ligne des dates ─────────────────────────────
-    let dateRowIdx = -1;
-    let colToDate  = {};
-
+    // Trouver ligne des dates et colonnes
+    let dateRowIdx = -1, colToDate = {};
     for (let ri = 0; ri < Math.min(5, rowsRaw.length); ri++) {
       const row = rowsRaw[ri] || [];
-      const dateCols = {};
-      let count = 0;
-
-      for (let ci = 1; ci < row.length; ci++) {
-        const v = row[ci];
-        let key = null;
-        // Cas A : datetime (quand cellDates:true est passé à XLSX.read)
-        if (v instanceof Date && !isNaN(v.getTime())) {
-          key = String(v.getDate()).padStart(2,'0') + '/' +
-                String(v.getMonth()+1).padStart(2,'0') + '/' + v.getFullYear();
+      const tmp = {}; let n = 0;
+      for (let ci = 0; ci < row.length; ci++) {
+        const v = row[ci]; let key = null;
+        if (v instanceof Date && !isNaN(v)) {
+          key = String(v.getDate()).padStart(2,'0')+'/'+String(v.getMonth()+1).padStart(2,'0')+'/'+v.getFullYear();
+        } else if (typeof v === 'number' && v > 40000 && v < 80000) {
+          const d2 = new Date(new Date(Date.UTC(1899,11,30)).getTime()+Math.round(v)*86400000);
+          key = String(d2.getUTCDate()).padStart(2,'0')+'/'+String(d2.getUTCMonth()+1).padStart(2,'0')+'/'+d2.getUTCFullYear();
+        } else if (typeof v === 'number' && v >= 1 && v <= 31 && Math.floor(v)===v) {
+          key = String(v).padStart(2,'0')+'/'+String(sheetMonth).padStart(2,'0')+'/'+sheetYear;
+        } else if (typeof v === 'string' && /^\d{1,2}$/.test(v.trim())) {
+          const d = parseInt(v); if (d>=1&&d<=31) key = String(d).padStart(2,'0')+'/'+String(sheetMonth).padStart(2,'0')+'/'+sheetYear;
         }
-        // Cas B : numéro de série Excel (> 40000 = après 2009)
-        else if (typeof v === 'number' && v > 40000 && v < 80000) {
-          // Convertir le serial Excel en date
-          const epoch = new Date(Date.UTC(1899, 11, 30));
-          const d2 = new Date(epoch.getTime() + Math.round(v) * 86400000);
-          key = String(d2.getUTCDate()).padStart(2,'0') + '/' +
-                String(d2.getUTCMonth()+1).padStart(2,'0') + '/' + d2.getUTCFullYear();
-        }
-        // Cas C : entier 1-31 (numéro du jour dans le mois)
-        else if (typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 31) {
-          key = String(v).padStart(2,'0') + '/' +
-                String(sheetMonth).padStart(2,'0') + '/' + sheetYear;
-        }
-        // Cas D : string "1"-"31"
-        else if (typeof v === 'string' && /^\d{1,2}$/.test(v.trim())) {
-          const n = parseInt(v.trim());
-          if (n >= 1 && n <= 31) {
-            key = String(n).padStart(2,'0') + '/' +
-                  String(sheetMonth).padStart(2,'0') + '/' + sheetYear;
-          }
-        }
-        if (key) { dateCols[ci] = key; count++; }
+        if (key) { tmp[ci]=key; n++; }
       }
-
-      if (count >= 15) { dateRowIdx = ri; colToDate = dateCols; break; }
+      if (n >= 15) { dateRowIdx=ri; colToDate=tmp; break; }
     }
-
     if (dateRowIdx < 0) return;
 
-    Object.values(colToDate).forEach(key => {
-      if (!planningAvailability[key]) planningAvailability[key] = [];
-    });
+    Object.values(colToDate).forEach(k => { if (!planningAvailability[k]) planningAvailability[k]=[]; });
 
-    // ── Lignes agents ────────────────────────────────────────
     const SKIP = new Set(['TOTAL GROUPE','TOTAL','A RECRUTER']);
-    const SKIP_START = ['TOTAL','JANV','FEVR','MARS','AVRI','MAI','JUIN','JUIL','AOUT','SEPT','OCTO','NOVE','DECE'];
+    const SKIP_ST = ['TOTAL','JANV','FEVR','MARS','AVRI','MAI','JUIN','JUIL','AOUT','SEPT','OCTO','NOVE','DECE'];
 
-    for (let r = dateRowIdx + 1; r < rowsRaw.length; r++) {
-      const rowR = rowsRaw[r];
-      if (!rowR) continue;
-      const nameRaw = rowR[0];
-      if (nameRaw === null || nameRaw === undefined) continue;
-      if (typeof nameRaw === 'number' || nameRaw instanceof Date) continue;
-      const nameCell = String(nameRaw).trim();
-      if (!nameCell || nameCell === 'null') continue;
-      const upper = nameCell.toUpperCase();
-      if (SKIP.has(upper)) continue;
-      if (SKIP_START.some(s => upper.startsWith(s))) continue;
-
-      const agentName = upper
-        .replace(/\s*[-\u2013\u2014]\s*(PM\s*)?\d+\s*$/, '')
-        .replace(/\s+\d+\s*$/, '')
-        .trim();
-      if (!agentName) continue;
-
-      Object.entries(colToDate).forEach(([col, dateStr]) => {
-        const cellRaw = rowR[parseInt(col)];
-        const isPresent = cellRaw === 1 || cellRaw === true || String(cellRaw).trim() === '1';
-        if (isPresent && !planningAvailability[dateStr].includes(agentName)) {
-          planningAvailability[dateStr].push(agentName);
-        }
+    for (let r = dateRowIdx+1; r < rowsRaw.length; r++) {
+      const rowR = rowsRaw[r]; if (!rowR) continue;
+      const nr = rowR[0];
+      if (nr===null||nr===undefined||typeof nr==='number'||nr instanceof Date) continue;
+      const nc = String(nr).trim(); if (!nc||nc==='null') continue;
+      const up = nc.toUpperCase();
+      if (SKIP.has(up)||SKIP_ST.some(s=>up.startsWith(s))) continue;
+      const an = up.replace(/\s*[-\u2013\u2014]\s*(PM\s*)?\d+\s*$/,'').replace(/\s+\d+\s*$/,'').trim();
+      if (!an) continue;
+      Object.entries(colToDate).forEach(([col,ds]) => {
+        const cv = rowR[+col];
+        if ((cv===1||cv===true||String(cv).trim()==='1') && !planningAvailability[ds].includes(an))
+          planningAvailability[ds].push(an);
       });
     }
   }
+
 
     function _parseHeaderDate(str) { return null; } // non utilisé
   function saveEditRoute() {
