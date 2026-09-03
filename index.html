@@ -2969,6 +2969,21 @@ function _matchAgentToPlanning(agentNom, planningList) {
   function _parseOneSheet(rowsRaw, rowsFmt) {
     if (!rowsRaw || rowsRaw.length < 3) return;
 
+    // Dump des 3 premières lignes pour diagnostic
+    for (let ri = 0; ri < Math.min(3, rowsRaw.length); ri++) {
+      const row = rowsRaw[ri] || [];
+      const dump = [];
+      for (let ci = 0; ci < Math.min(10, row.length); ci++) {
+        const v = row[ci];
+        dump.push(`[${ci}]=${JSON.stringify(v)}(${v instanceof Date ? 'Date:'+v.toISOString().slice(0,10) : typeof v})`);
+      }
+      console.log(`[RAW] ri=${ri}: ${dump.join(' | ')}`);
+    }
+    // Dump ligne 1 complète types
+    const row1 = rowsRaw[1] || [];
+    const types1 = row1.slice(0,35).map((v,i) => `${i}:${v instanceof Date?'D':''}${typeof v === 'number'?v:''}${typeof v === 'string'?'"'+v+'"':''}`).join(' ');
+    console.log(`[RAW] row1 types: ${types1}`);
+
     // ── Chercher la ligne qui contient le plus de dates réelles (datetime) ──
     let dateRowIdx = -1, colToDate = {}, sheetMonth = null, sheetYear = null;
 
