@@ -3003,12 +3003,16 @@ function _matchAgentToPlanning(agentNom, planningList) {
       }
       if (n >= 15) { dateRowIdx=ri; colToDate=tmp; break; }
     }
+    console.log(`[PARSER] mois=${sheetMonth}/${sheetYear} dateRowIdx=${dateRowIdx} cols=${Object.keys(colToDate).length} ex:${JSON.stringify(Object.entries(colToDate).slice(0,3))}`);
     if (dateRowIdx < 0) return;
 
     Object.values(colToDate).forEach(k => { if (!planningAvailability[k]) planningAvailability[k]=[]; });
 
     const SKIP = new Set(['TOTAL GROUPE','TOTAL','A RECRUTER']);
     const SKIP_ST = ['TOTAL','JANV','FEVR','MARS','AVRI','MAI','JUIN','JUIL','AOUT','SEPT','OCTO','NOVE','DECE'];
+
+    // Debug: afficher les types des cellules de présence pour la 1ère ligne agent
+    let debugDone = false;
 
     for (let r = dateRowIdx+1; r < rowsRaw.length; r++) {
       const rowR = rowsRaw[r]; if (!rowR) continue;
@@ -3019,6 +3023,15 @@ function _matchAgentToPlanning(agentNom, planningList) {
       if (SKIP.has(up)||SKIP_ST.some(s=>up.startsWith(s))) continue;
       const an = up.replace(/\s*[-\u2013\u2014]\s*(PM\s*)?\d+\s*$/,'').replace(/\s+\d+\s*$/,'').trim();
       if (!an) continue;
+
+      // Debug première ligne agent
+      if (!debugDone) {
+        const sampleCols = Object.entries(colToDate).slice(0,5);
+        const debugVals = sampleCols.map(([ci,ds]) => `col${ci}(${ds})=${JSON.stringify(rowR[+ci])}[${typeof rowR[+ci]}]`).join(' | ');
+        console.log(`[PARSER DEBUG] Agent="${an}" | ${debugVals}`);
+        debugDone = true;
+      }
+
       Object.entries(colToDate).forEach(([col,ds]) => {
         const cv = rowR[+col];
         if ((cv===1||cv===true||String(cv).trim()==='1') && !planningAvailability[ds].includes(an))
