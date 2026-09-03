@@ -2936,23 +2936,28 @@ function _matchAgentToPlanning(agentNom, planningList) {
 
   function showXlsxDiag() {
     const dates = Object.keys(planningAvailability).sort();
+    const todayKey = normDate(new Date());
+    const todayAgents = planningAvailability[todayKey] || [];
     const modal = document.createElement('div');
     modal.className = 'modal-overlay open';
     modal.style.cssText = 'z-index:10001';
-    const sample = dates.slice(0,5).map(d =>
+    const sample = dates.slice(0, 8).map(d =>
       `<div style="padding:5px 0;border-bottom:1px solid var(--border)">
         <b style="color:var(--cyan)">${d}</b> →
         <span style="color:var(--text-secondary)">${(planningAvailability[d]||[]).slice(0,8).join(', ')||'<span style="color:var(--red)">aucun</span>'}${(planningAvailability[d]||[]).length>8?' …':''}</span>
        </div>`
     ).join('');
-    modal.innerHTML = `<div class="modal" style="width:600px;max-width:96vw">
+    modal.innerHTML = `<div class="modal" style="width:640px;max-width:96vw">
       <div class="modal-title"><span>🔍 Diagnostic planning</span>
         <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">✕</button></div>
-      <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">
-        <b style="color:var(--green)">${dates.length}</b> jours chargés ·
-        <b style="color:var(--green)">${new Set(Object.values(planningAvailability).flat()).size}</b> agents distincts
+      <div style="margin-bottom:10px;padding:8px 12px;background:var(--surface);border-radius:8px;font-size:12px">
+        <div>📅 <b style="color:var(--green)">${dates.length}</b> jours · <b style="color:var(--green)">${new Set(Object.values(planningAvailability).flat()).size}</b> agents distincts</div>
+        <div style="margin-top:5px">Aujourd'hui <b style="color:var(--cyan)">${todayKey}</b> : 
+          ${todayAgents.length ? `<b style="color:var(--green)">${todayAgents.length}</b> présents → ${todayAgents.join(', ')}` : '<span style="color:var(--amber)">aucun agent</span>'}
+        </div>
       </div>
-      <div style="max-height:320px;overflow-y:auto;font-size:12px">${sample || '<div style="color:var(--red)">Aucune donnée</div>'}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Premiers jours chargés :</div>
+      <div style="max-height:280px;overflow-y:auto;font-size:12px">${sample || '<div style="color:var(--red)">Aucune donnée</div>'}</div>
       <div class="btn-row" style="margin-top:12px">
         <button class="btn-secondary" onclick="this.closest('.modal-overlay').remove()">Fermer</button>
       </div>
@@ -2991,17 +2996,25 @@ function _matchAgentToPlanning(agentNom, planningList) {
       for (let ci = 1; ci < row.length; ci++) {
         const v = row[ci];
         let key = null;
-        // Cas A : datetime
+        // Cas A : datetime (quand cellDates:true est passé à XLSX.read)
         if (v instanceof Date && !isNaN(v.getTime())) {
           key = String(v.getDate()).padStart(2,'0') + '/' +
                 String(v.getMonth()+1).padStart(2,'0') + '/' + v.getFullYear();
         }
-        // Cas B : entier 1-31
+        // Cas B : numéro de série Excel (> 40000 = après 2009)
+        else if (typeof v === 'number' && v > 40000 && v < 80000) {
+          // Convertir le serial Excel en date
+          const epoch = new Date(Date.UTC(1899, 11, 30));
+          const d2 = new Date(epoch.getTime() + Math.round(v) * 86400000);
+          key = String(d2.getUTCDate()).padStart(2,'0') + '/' +
+                String(d2.getUTCMonth()+1).padStart(2,'0') + '/' + d2.getUTCFullYear();
+        }
+        // Cas C : entier 1-31 (numéro du jour dans le mois)
         else if (typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 31) {
           key = String(v).padStart(2,'0') + '/' +
                 String(sheetMonth).padStart(2,'0') + '/' + sheetYear;
         }
-        // Cas C : string "1"-"31"
+        // Cas D : string "1"-"31"
         else if (typeof v === 'string' && /^\d{1,2}$/.test(v.trim())) {
           const n = parseInt(v.trim());
           if (n >= 1 && n <= 31) {
@@ -3012,7 +3025,7 @@ function _matchAgentToPlanning(agentNom, planningList) {
         if (key) { dateCols[ci] = key; count++; }
       }
 
-      if (count >= 20) { dateRowIdx = ri; colToDate = dateCols; break; }
+      if (count >= 15) { dateRowIdx = ri; colToDate = dateCols; break; }
     }
 
     if (dateRowIdx < 0) return;
@@ -3044,7 +3057,7 @@ function _matchAgentToPlanning(agentNom, planningList) {
       if (!agentName) continue;
 
       Object.entries(colToDate).forEach(([col, dateStr]) => {
-        const cellRaw = rowR[col];
+        const cellRaw = rowR[parseInt(col)];
         const isPresent = cellRaw === 1 || cellRaw === true || String(cellRaw).trim() === '1';
         if (isPresent && !planningAvailability[dateStr].includes(agentName)) {
           planningAvailability[dateStr].push(agentName);
