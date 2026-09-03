@@ -2969,72 +2969,84 @@ function _matchAgentToPlanning(agentNom, planningList) {
   function _parseOneSheet(rowsRaw, rowsFmt) {
     if (!rowsRaw || rowsRaw.length < 3) return;
 
-    // Trouver mois/annee depuis col A ligne 0 ou 1
-    let sheetYear = null, sheetMonth = null;
-    for (let ri = 0; ri < Math.min(4, rowsRaw.length); ri++) {
-      for (let ci = 0; ci < Math.min(35, (rowsRaw[ri]||[]).length); ci++) {
-        const v = rowsRaw[ri][ci];
-        if (v instanceof Date && !isNaN(v) && v.getFullYear() >= 2020) {
-          sheetYear = v.getFullYear(); sheetMonth = v.getMonth()+1; break;
-        }
-      }
-      if (sheetYear) break;
-    }
-    if (!sheetYear) return;
+    // ── Chercher la ligne qui contient le plus de dates réelles (datetime) ──
+    let dateRowIdx = -1, colToDate = {}, sheetMonth = null, sheetYear = null;
 
-    // Trouver ligne des dates et colonnes
-    let dateRowIdx = -1, colToDate = {};
     for (let ri = 0; ri < Math.min(5, rowsRaw.length); ri++) {
       const row = rowsRaw[ri] || [];
-      const tmp = {}; let n = 0;
+      const tmp = {}; let nDates = 0, nInts = 0;
+
       for (let ci = 0; ci < row.length; ci++) {
-        const v = row[ci]; let key = null;
-        if (v instanceof Date && !isNaN(v)) {
-          key = String(v.getDate()).padStart(2,'0')+'/'+String(v.getMonth()+1).padStart(2,'0')+'/'+v.getFullYear();
+        const v = row[ci];
+        if (v instanceof Date && !isNaN(v) && v.getFullYear() >= 2020) {
+          const key = String(v.getDate()).padStart(2,'0')+'/'+String(v.getMonth()+1).padStart(2,'0')+'/'+v.getFullYear();
+          tmp[ci] = { key, month: v.getMonth()+1, year: v.getFullYear(), type:'date' };
+          nDates++;
         } else if (typeof v === 'number' && v > 40000 && v < 80000) {
           const d2 = new Date(new Date(Date.UTC(1899,11,30)).getTime()+Math.round(v)*86400000);
-          key = String(d2.getUTCDate()).padStart(2,'0')+'/'+String(d2.getUTCMonth()+1).padStart(2,'0')+'/'+d2.getUTCFullYear();
+          const key = String(d2.getUTCDate()).padStart(2,'0')+'/'+String(d2.getUTCMonth()+1).padStart(2,'0')+'/'+d2.getUTCFullYear();
+          tmp[ci] = { key, month: d2.getUTCMonth()+1, year: d2.getUTCFullYear(), type:'serial' };
+          nDates++;
         } else if (typeof v === 'number' && v >= 1 && v <= 31 && Math.floor(v)===v) {
-          // Vérifier que ce jour existe dans ce mois (évite le débordement)
-          const testDate = new Date(sheetYear, sheetMonth-1, v);
-          if (testDate.getFullYear()===sheetYear && testDate.getMonth()+1===sheetMonth && testDate.getDate()===v) {
-            key = String(v).padStart(2,'0')+'/'+String(sheetMonth).padStart(2,'0')+'/'+sheetYear;
-          }
-        } else if (typeof v === 'string' && /^\d{1,2}$/.test(v.trim())) {
-          const d = parseInt(v);
-          if (d>=1&&d<=31) {
-            const testDate = new Date(sheetYear, sheetMonth-1, d);
-            if (testDate.getFullYear()===sheetYear && testDate.getMonth()+1===sheetMonth && testDate.getDate()===d) {
-              key = String(d).padStart(2,'0')+'/'+String(sheetMonth).padStart(2,'0')+'/'+sheetYear;
-            }
+          tmp[ci] = { key: null, day: v, type:'int' };
+          nInts++;
+        }
+      }
+
+      if (nDates >= 15 || (nInts >= 15 && nDates === 0)) {
+        // Trouver le mois dominant parmi les vraies dates
+        if (nDates >= 15) {
+          const monthCounts = {};
+          Object.values(tmp).filter(x=>x.type!=='int').forEach(x => {
+            const mk = x.month+'/'+x.year;
+            monthCounts[mk] = (monthCounts[mk]||0)+1;
+          });
+          const dominant = Object.entries(monthCounts).sort((a,b)=>b[1]-a[1])[0];
+          if (dominant) {
+            const [mo, yr] = dominant[0].split('/').map(Number);
+            sheetMonth = mo; sheetYear = yr;
           }
         }
-        if (key) { tmp[ci]=key; n++; }
-      }
-      if (n >= 15) {
-        // Garder uniquement les colonnes dont la date appartient AU MOIS COURANT
-        const filtered = {};
-        Object.entries(tmp).forEach(([ci, ds]) => {
-          const parts = ds.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-          if (parts && parseInt(parts[2]) === sheetMonth && parseInt(parts[3]) === sheetYear) {
-            filtered[ci] = ds;
+
+        // Si on n'a que des entiers, trouver le mois depuis la col A lignes précédentes
+        if (!sheetMonth) {
+          for (let pi = 0; pi < ri; pi++) {
+            const prow = rowsRaw[pi] || [];
+            for (let pci = 0; pci < Math.min(5, prow.length); pci++) {
+              const pv = prow[pci];
+              if (pv instanceof Date && !isNaN(pv) && pv.getFullYear() >= 2020) {
+                sheetMonth = pv.getMonth()+1; sheetYear = pv.getFullYear(); break;
+              }
+            }
+            if (sheetMonth) break;
+          }
+        }
+        if (!sheetMonth || !sheetYear) continue;
+
+        // Construire colToDate en gardant seulement le mois dominant
+        Object.entries(tmp).forEach(([ci, info]) => {
+          if (info.type === 'int') {
+            // Reconstruire la date avec le mois courant
+            const td = new Date(sheetYear, sheetMonth-1, info.day);
+            if (td.getFullYear()===sheetYear && td.getMonth()+1===sheetMonth && td.getDate()===info.day) {
+              colToDate[ci] = String(info.day).padStart(2,'0')+'/'+String(sheetMonth).padStart(2,'0')+'/'+sheetYear;
+            }
+          } else if (info.month === sheetMonth && info.year === sheetYear) {
+            colToDate[ci] = info.key;
           }
         });
-        colToDate = filtered;
-        dateRowIdx = ri;
-        break;
+
+        if (Object.keys(colToDate).length >= 15) { dateRowIdx = ri; break; }
+        else { colToDate = {}; sheetMonth = null; sheetYear = null; }
       }
     }
-    console.log(`[PARSER] mois=${sheetMonth}/${sheetYear} dateRowIdx=${dateRowIdx} cols=${Object.keys(colToDate).length} ex:${JSON.stringify(Object.entries(colToDate).slice(0,3))}`);
-    if (dateRowIdx < 0) return;
+
+    if (dateRowIdx < 0 || !Object.keys(colToDate).length) return;
 
     Object.values(colToDate).forEach(k => { if (!planningAvailability[k]) planningAvailability[k]=[]; });
 
     const SKIP = new Set(['TOTAL GROUPE','TOTAL','A RECRUTER']);
     const SKIP_ST = ['TOTAL','JANV','FEVR','MARS','AVRI','MAI','JUIN','JUIL','AOUT','SEPT','OCTO','NOVE','DECE'];
-
-    // Debug: afficher les types des cellules de présence pour la 1ère ligne agent
-    let debugDone = false;
 
     for (let r = dateRowIdx+1; r < rowsRaw.length; r++) {
       const rowR = rowsRaw[r]; if (!rowR) continue;
@@ -3045,15 +3057,6 @@ function _matchAgentToPlanning(agentNom, planningList) {
       if (SKIP.has(up)||SKIP_ST.some(s=>up.startsWith(s))) continue;
       const an = up.replace(/\s*[-\u2013\u2014]\s*(PM\s*)?\d+\s*$/,'').replace(/\s+\d+\s*$/,'').trim();
       if (!an) continue;
-
-      // Debug première ligne agent
-      if (!debugDone) {
-        const sampleCols = Object.entries(colToDate).slice(0,5);
-        const debugVals = sampleCols.map(([ci,ds]) => `col${ci}(${ds})=${JSON.stringify(rowR[+ci])}[${typeof rowR[+ci]}]`).join(' | ');
-        console.log(`[PARSER DEBUG] Agent="${an}" | ${debugVals}`);
-        debugDone = true;
-      }
-
       Object.entries(colToDate).forEach(([col,ds]) => {
         const cv = rowR[+col];
         if ((cv===1||cv===true||String(cv).trim()==='1') && !planningAvailability[ds].includes(an))
