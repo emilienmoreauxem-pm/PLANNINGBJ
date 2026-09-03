@@ -2995,13 +2995,39 @@ function _matchAgentToPlanning(agentNom, planningList) {
           const d2 = new Date(new Date(Date.UTC(1899,11,30)).getTime()+Math.round(v)*86400000);
           key = String(d2.getUTCDate()).padStart(2,'0')+'/'+String(d2.getUTCMonth()+1).padStart(2,'0')+'/'+d2.getUTCFullYear();
         } else if (typeof v === 'number' && v >= 1 && v <= 31 && Math.floor(v)===v) {
-          key = String(v).padStart(2,'0')+'/'+String(sheetMonth).padStart(2,'0')+'/'+sheetYear;
+          // Vérifier que ce jour est valide pour ce mois (éviter le débordement)
+          const testDate = new Date(sheetYear, sheetMonth-1, v);
+          if (testDate.getMonth()+1 === sheetMonth) {
+            key = String(v).padStart(2,'0')+'/'+String(sheetMonth).padStart(2,'0')+'/'+sheetYear;
+          }
         } else if (typeof v === 'string' && /^\d{1,2}$/.test(v.trim())) {
-          const d = parseInt(v); if (d>=1&&d<=31) key = String(d).padStart(2,'0')+'/'+String(sheetMonth).padStart(2,'0')+'/'+sheetYear;
+          const d = parseInt(v);
+          if (d>=1&&d<=31) {
+            const testDate = new Date(sheetYear, sheetMonth-1, d);
+            if (testDate.getMonth()+1 === sheetMonth) {
+              key = String(d).padStart(2,'0')+'/'+String(sheetMonth).padStart(2,'0')+'/'+sheetYear;
+            }
+          }
         }
         if (key) { tmp[ci]=key; n++; }
       }
-      if (n >= 15) { dateRowIdx=ri; colToDate=tmp; break; }
+      if (n >= 15) {
+        // Filtrer les colonnes hors-mois : garder seulement les jours qui forment
+        // une séquence croissante COMMENÇANT à 1 (le 1er du mois courant)
+        // Trouver la première colonne avec valeur 1 (= 1er du mois)
+        const entries = Object.entries(tmp);
+        let firstOneIdx = entries.findIndex(([,ds]) => ds.startsWith('01/'));
+        if (firstOneIdx > 0) {
+          // Supprimer les colonnes avant le 1er du mois
+          const filtered = {};
+          entries.slice(firstOneIdx).forEach(([ci,ds]) => { filtered[ci] = ds; });
+          colToDate = filtered;
+        } else {
+          colToDate = tmp;
+        }
+        dateRowIdx=ri;
+        break;
+      }
     }
     console.log(`[PARSER] mois=${sheetMonth}/${sheetYear} dateRowIdx=${dateRowIdx} cols=${Object.keys(colToDate).length} ex:${JSON.stringify(Object.entries(colToDate).slice(0,3))}`);
     if (dateRowIdx < 0) return;
