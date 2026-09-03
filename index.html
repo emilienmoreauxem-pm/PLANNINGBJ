@@ -2995,16 +2995,16 @@ function _matchAgentToPlanning(agentNom, planningList) {
           const d2 = new Date(new Date(Date.UTC(1899,11,30)).getTime()+Math.round(v)*86400000);
           key = String(d2.getUTCDate()).padStart(2,'0')+'/'+String(d2.getUTCMonth()+1).padStart(2,'0')+'/'+d2.getUTCFullYear();
         } else if (typeof v === 'number' && v >= 1 && v <= 31 && Math.floor(v)===v) {
-          // Vérifier que ce jour est valide pour ce mois (éviter le débordement)
+          // Vérifier que ce jour existe dans ce mois (évite le débordement)
           const testDate = new Date(sheetYear, sheetMonth-1, v);
-          if (testDate.getMonth()+1 === sheetMonth) {
+          if (testDate.getFullYear()===sheetYear && testDate.getMonth()+1===sheetMonth && testDate.getDate()===v) {
             key = String(v).padStart(2,'0')+'/'+String(sheetMonth).padStart(2,'0')+'/'+sheetYear;
           }
         } else if (typeof v === 'string' && /^\d{1,2}$/.test(v.trim())) {
           const d = parseInt(v);
           if (d>=1&&d<=31) {
             const testDate = new Date(sheetYear, sheetMonth-1, d);
-            if (testDate.getMonth()+1 === sheetMonth) {
+            if (testDate.getFullYear()===sheetYear && testDate.getMonth()+1===sheetMonth && testDate.getDate()===d) {
               key = String(d).padStart(2,'0')+'/'+String(sheetMonth).padStart(2,'0')+'/'+sheetYear;
             }
           }
@@ -3012,20 +3012,16 @@ function _matchAgentToPlanning(agentNom, planningList) {
         if (key) { tmp[ci]=key; n++; }
       }
       if (n >= 15) {
-        // Filtrer les colonnes hors-mois : garder seulement les jours qui forment
-        // une séquence croissante COMMENÇANT à 1 (le 1er du mois courant)
-        // Trouver la première colonne avec valeur 1 (= 1er du mois)
-        const entries = Object.entries(tmp);
-        let firstOneIdx = entries.findIndex(([,ds]) => ds.startsWith('01/'));
-        if (firstOneIdx > 0) {
-          // Supprimer les colonnes avant le 1er du mois
-          const filtered = {};
-          entries.slice(firstOneIdx).forEach(([ci,ds]) => { filtered[ci] = ds; });
-          colToDate = filtered;
-        } else {
-          colToDate = tmp;
-        }
-        dateRowIdx=ri;
+        // Garder uniquement les colonnes dont la date appartient AU MOIS COURANT
+        const filtered = {};
+        Object.entries(tmp).forEach(([ci, ds]) => {
+          const parts = ds.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+          if (parts && parseInt(parts[2]) === sheetMonth && parseInt(parts[3]) === sheetYear) {
+            filtered[ci] = ds;
+          }
+        });
+        colToDate = filtered;
+        dateRowIdx = ri;
         break;
       }
     }
