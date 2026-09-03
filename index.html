@@ -2828,13 +2828,6 @@ function _matchAgentToPlanning(agentNom, planningList) {
   // disponibilités ou les importent via copier-coller CSV.
 
   let planningAvailability = {};
-// Charger les données pré-chargées immédiatement
-(function() {
-  if (typeof _PLANNING_PRELOADED !== 'undefined') {
-    Object.assign(planningAvailability, _PLANNING_PRELOADED);
-    console.log('[PLANNING] Pré-chargé:', Object.keys(planningAvailability).length, 'jours');
-  }
-})();
 
 // ── Planning pré-chargé depuis le fichier Excel (via Python) ──────
 // Mis à jour le 03/09/2026
@@ -2843,8 +2836,9 @@ const _PLANNING_PRELOADED = {"01/01/2026": ["LAURENCE SLATER", "RONCEVIC MARC", 
 // Charger les données pré-chargées dans planningAvailability au démarrage
 function _loadPreloadedPlanning() {
   Object.assign(planningAvailability, _PLANNING_PRELOADED);
-  console.log('[PLANNING] Données pré-chargées:', Object.keys(planningAvailability).length, 'jours');
+  console.log('[PLANNING] Pré-chargé:', Object.keys(planningAvailability).length, 'jours');
 }
+_loadPreloadedPlanning(); // Charger immédiatement après déclaration
  // { "2026-06-01": ["PARIS", "SCALISE", ...], ... }
 
   // Correspondance flexible entre nom planning (NOM PRENOM) et nom base agents
@@ -6709,7 +6703,6 @@ window._appRender = function() {
   renderPrevDayContainer();
 };
 
-_loadPreloadedPlanning();
 const _hadSaved = loadSavedData();
 
 renderVacationJour();
