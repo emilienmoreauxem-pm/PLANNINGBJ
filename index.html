@@ -2855,7 +2855,7 @@ _loadPreloadedPlanning();
       refreshEditMembres();
       return;
     }
-    const available = planningAvailability[dateVal] || [];
+    const available = planningAvailability[dateKey] || [];
     const r = routesData[editingRouteIdx];
     const alreadyPositioned = (r?.membres || []).map(m => m.n);
 
@@ -2872,7 +2872,7 @@ _loadPreloadedPlanning();
         ].join('');
       }
     } else {
-      if (infoEl) infoEl.innerHTML = `<span style="color:var(--amber)">⚠ Aucun agent présent ce jour — chargez le planning xlsx</span>`;
+      if (infoEl) infoEl.innerHTML = `<span style="color:var(--amber)">⚠ Aucun agent présent ce jour selon le planning</span>`;
       if (tagsEl) tagsEl.innerHTML = '';
     }
     refreshEditMembres();
