@@ -1579,6 +1579,7 @@ function _autoSaveToPlanning() {
       prevVacations.unshift(snapshot);
     }
 
+    const statusEl = document.getElementById('prep-date-status');
     if (statusEl) {
       const t = new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
       statusEl.innerHTML = `<span style="font-size:10px;color:var(--text-3)">● Auto-enregistré ${t}</span>`;
@@ -2662,7 +2663,8 @@ function _matchAgentToPlanning(agentNom, planningList) {
 
   function _getAgentOpts(selectedNom) {
     const dateVal   = document.getElementById('planning-date-filter')?.value || '';
-    const available = dateVal ? (planningAvailability[dateVal] || []) : [];
+    const dateKey   = dateVal ? pickerToFR(dateVal) : '';
+    const available = dateKey ? (planningAvailability[dateKey] || []) : [];
 
     if (agents.length !== _cachedAgentCount || dateVal !== _cachedDateVal) {
       _cachedAgentCount = agents.length;
@@ -2682,7 +2684,8 @@ function _matchAgentToPlanning(agentNom, planningList) {
     if (!container) return;
 
     const dateVal   = document.getElementById('planning-date-filter')?.value || '';
-    const available = dateVal ? (planningAvailability[dateVal] || []) : [];
+    const dateKey   = dateVal ? pickerToFR(dateVal) : '';
+    const available = dateKey ? (planningAvailability[dateKey] || []) : [];
 
     if (!r.membres.length) {
       container.innerHTML = '<div style="font-size:12px;color:var(--text-2);text-align:center;padding:16px">Aucun membre — cliquez « + Ajouter un agent »</div>';
@@ -2845,6 +2848,7 @@ _loadPreloadedPlanning();
   function updatePlanningDateFilter(dateVal) {
     const infoEl = document.getElementById('planning-availability-info');
     const tagsEl = document.getElementById('planning-available-agents');
+    const dateKey = dateVal ? pickerToFR(dateVal) : '';
     if (!dateVal) {
       if (infoEl) infoEl.textContent = 'Charger le fichier Excel pour voir les disponibilités';
       if (tagsEl) tagsEl.innerHTML = '';
