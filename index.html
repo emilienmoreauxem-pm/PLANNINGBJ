@@ -2612,20 +2612,26 @@ function _matchAgentToPlanning(agentNom, planningList) {
       localStorage.removeItem('pm_planning_avail');
       localStorage.removeItem('pm_planning_avail_v2');
     } catch(e) {}
-    // Restaurer les données pré-chargées si planningAvailability est vide
-    if (!Object.keys(planningAvailability).length && typeof _PLANNING_PRELOADED !== 'undefined') {
+    // Toujours s'assurer que le planning pré-chargé est disponible
+    if (typeof _PLANNING_PRELOADED !== 'undefined' && Object.keys(planningAvailability).length === 0) {
       Object.assign(planningAvailability, _PLANNING_PRELOADED);
     }
-    // Pre-fill planning date from route date
+
+    // Pre-fill planning date
     const planningDateInput = document.getElementById('planning-date-filter');
     if (planningDateInput) {
-      const dateVal = r.date ? r.date.split('/').reverse().join('-') : '';
-      planningDateInput.value = dateVal;
-      if (dateVal) updatePlanningDateFilter(dateVal);
-      else {
-        document.getElementById('planning-availability-info').textContent = 'Saisir une date pour filtrer les agents disponibles';
-        document.getElementById('planning-available-agents').innerHTML = '';
+      // Priorité : date de la feuille de route → date du picker préparation → aujourd'hui
+      let dateVal = '';
+      if (r.date) {
+        const parts = r.date.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (parts) dateVal = `${parts[3]}-${parts[2]}-${parts[1]}`;
       }
+      if (!dateVal) dateVal = document.getElementById('prep-date-picker')?.value || '';
+      if (!dateVal) dateVal = new Date().toISOString().split('T')[0];
+
+      planningDateInput.value = dateVal;
+      // Forcer la mise à jour même si la date n'a pas changé
+      updatePlanningDateFilter(dateVal);
     }
     refreshEditMembres();
     refreshRegMissions();
