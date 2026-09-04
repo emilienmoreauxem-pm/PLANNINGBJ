@@ -2611,8 +2611,10 @@ function _matchAgentToPlanning(agentNom, planningList) {
       localStorage.removeItem('pm_planning_avail');
       localStorage.removeItem('pm_planning_avail_v2');
     } catch(e) {}
-    // Ne pas charger depuis le cache — toujours re-parser le fichier Excel
-    planningAvailability = {};
+    // Restaurer les données pré-chargées si planningAvailability est vide
+    if (!Object.keys(planningAvailability).length && typeof _PLANNING_PRELOADED !== 'undefined') {
+      Object.assign(planningAvailability, _PLANNING_PRELOADED);
+    }
     // Pre-fill planning date from route date
     const planningDateInput = document.getElementById('planning-date-filter');
     if (planningDateInput) {
@@ -2901,6 +2903,8 @@ _loadPreloadedPlanning();
         const wb = window.XLSX.read(data, { type:'array', cellDates:true, raw:true });
         _xlsxWorkbook = wb;
 
+        // Réinitialiser et recharger le planning depuis Excel
+        // (les données pré-chargées seront remplacées par les nouvelles)
         planningAvailability = {};
 
         // Onglets mois (ignorer "SOURCES" et tout onglet non-mois)
@@ -3900,8 +3904,42 @@ function importArchiveFromFile(input) {
     try {
       const data = JSON.parse(e.target.result);
 
-      // Vérifier que c'est bien une archive valide
-      if (!data || typeof data !== 'object') throw new Error('Format invalide');
+      // Cas 3 : fichier exporté depuis "Exporter tout" (exportAllArchives)
+      // Format : { prevVacations: [...], archives: [...], exportedAt: "..." }
+      if (data.prevVacations && Array.isArray(data.prevVacations)) {
+        const nbVac = data.prevVacations.length;
+        const nbArc = (data.archives || []).length;
+
+        if (!confirm(
+          `Fichier "${file.name}" chargé.\n` +
+          `${nbVac} vacation(s) + ${nbArc} archive(s) manuelles\nExporté le : ${data.exportedAt || '—'}\n\n` +
+          `OK = Importer (fusionne avec les données existantes)\nAnnuler = Annuler`
+        )) { input.value = ''; return; }
+
+        // Fusionner prevVacations sans doublon
+        let added = 0;
+        data.prevVacations.forEach(v => {
+          const dateKey = v.dateStr || v.date || '';
+          const exists = prevVacations.some(pv => (pv.dateStr||pv.date||'') === dateKey);
+          if (!exists) { prevVacations.push(v); added++; }
+        });
+        // Fusionner archives manuelles
+        (data.archives || []).forEach(a => {
+          archives.push(a);
+        });
+
+        saveData();
+        renderArchives();
+        if (typeof renderPrevCalendar === 'function') renderPrevCalendar();
+
+        const toast = document.createElement('div');
+        toast.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:9999;background:var(--surface-2);border:1px solid rgba(16,185,129,.4);border-radius:var(--radius);padding:12px 18px;font-size:13px;color:#6ee7b7;box-shadow:0 8px 24px rgba(0,0,0,.4)';
+        toast.textContent = `✓ ${added} vacation(s) importée(s) sur ${nbVac}`;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3500);
+        input.value = '';
+        return;
+      }
 
       // Cas 1 : fichier exporté depuis le bouton "Exporter" → structure archive complète
       // Cas 2 : fichier exporté depuis Firebase / sauvegarde complète → structure planning
