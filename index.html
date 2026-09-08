@@ -1549,8 +1549,11 @@ function _autoSaveToPlanning() {
     const picker = document.getElementById('prep-date-picker');
     const dateVal = picker?.value;
     if (!dateVal || !editMode) return;
-    // Ne pas sauvegarder si aucun équipage (évite d'écraser avec un brouillon vide)
-    if (!routesData.length) return;
+    // Sauvegarder si au moins une feuille de route OU des postes fixes OU des missions cochées
+    const hasContent = routesData.length > 0 ||
+      Object.values(postesData).some(arr => arr && arr.length > 0) ||
+      regularMissions.length > 0;
+    if (!hasContent) return;
 
     const dateFormatted = pickerToFR(dateVal);
 
@@ -2680,7 +2683,15 @@ function _matchAgentToPlanning(agentNom, planningList) {
         return `<option value="${a.nom}">${icon}${a.nom} — mat.${a.mat||'—'}</option>`;
       }).join('');
     }
-    return '<option value="">— Sélectionner —</option>' + _cachedAgentOpts;
+
+    // Options spéciales (indisponibilités / formations)
+    const specialOpts = `<optgroup label="── Statuts spéciaux ──">
+      <option value="SPORT">SPORT</option>
+      <option value="FE">FE — Formation Entraînement</option>
+      <option value="DEPART AVANCE">Départ avancé</option>
+    </optgroup>`;
+
+    return '<option value="">— Sélectionner —</option>' + _cachedAgentOpts + specialOpts;
   }
 
   function refreshEditMembres() {
@@ -6487,11 +6498,13 @@ function printPrepOverview() {
 
   // ── Équipages ──────────────────────────────────────────────
   const equipCards = routesData.map(r => {
-    const pr = PAUSES_REPAS.find(p => p.id === r.repas);
+    const pr    = PAUSES_REPAS.find(p => p.id === r.repas);
+    const phone = r.telephone ? PHONES[r.telephone] : null;
     const badges = [
       r.role     ? `<span class="badge amber">${r.role}</span>` : '',
       r.fourriere? `<span class="badge amber">🚗 Fourrière</span>` : '',
       pr         ? `<span class="badge blue">${pr.id}</span>` : '',
+      phone      ? `<span class="badge green">📱 ${phone.label}</span>` : '',
     ].filter(Boolean).join('');
 
     const membres = r.membres.length ? r.membres.map(m => {
@@ -6505,7 +6518,13 @@ function printPrepOverview() {
     }).join('') : '<div style="font-size:11px;color:#94a3b8;padding:4px 0">Aucun agent</div>';
 
     const zones = (r.zones||[]).length
-      ? `<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">${r.zones.map(z=>`<span class="badge green">${z}</span>`).join('')}</div>` : '';
+      ? `<div style="margin-top:5px;display:flex;gap:3px;flex-wrap:wrap">${r.zones.map(z=>`<span class="badge green">${z}</span>`).join('')}</div>` : '';
+
+    const specMiss = (r.missionsSpec||[]).length
+      ? `<div style="margin-top:5px;border-top:1px solid #f1f5f9;padding-top:4px">${r.missionsSpec.map(ms=>`<div style="font-size:10px;color:#475569;padding:1px 0">› ${ms}</div>`).join('')}</div>` : '';
+
+    const phoneBar = phone
+      ? `<div style="margin-top:4px;font-size:10px;color:#059669;font-weight:600">📱 ${phone.num}</div>` : '';
 
     return `<div class="equip-card">
       <div class="equip-header">
@@ -6515,6 +6534,8 @@ function printPrepOverview() {
       <div class="equip-body">
         ${membres}
         ${zones}
+        ${phoneBar}
+        ${specMiss}
       </div>
     </div>`;
   }).join('');
