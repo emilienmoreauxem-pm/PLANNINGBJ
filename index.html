@@ -1585,10 +1585,8 @@ function _autoSaveToPlanning() {
       statusEl.innerHTML = `<span style="font-size:10px;color:var(--text-3)">● Auto-enregistré ${t}</span>`;
     }
 
-    // Rafraîchir le calendrier planning si l'onglet est visible
-    if (document.getElementById('tab-planning')?.classList.contains('active')) {
-      renderPrevCalendar();
-    }
+    // Rafraîchir le calendrier planning dans tous les cas
+    if (typeof renderPrevCalendar === 'function') renderPrevCalendar();
   }, 1500);
 }
 
@@ -2034,7 +2032,8 @@ function savePrepToPlanning() {
 
   logAction('ajout', `Vacation enregistrée dans le planning`, `Date : ${dateFormatted} · ${routesData.length} équipage(s)`);
   saveData();
-  renderPrevCalendar(); // Mettre à jour les points verts du calendrier
+  renderPrevCalendar(); // Mettre à jour les points du calendrier
+  if (prevSelectedDate === dateFormatted) renderPrevDayContainer(); // Rafraîchir si ce jour est sélectionné
 
   // Feedback visuel sur le bouton dédié
   const saveBtn = document.getElementById('prep-save-btn');
@@ -4977,10 +4976,10 @@ function renderPrevCalendar() {
   // Afficher -15 jours à +30 jours autour d'aujourd'hui
   const today = new Date();
   const days = [];
-  for (let i = -15; i <= 30; i++) {
+  for (let i = -15; i <= 45; i++) {
     const d = new Date(today);
     d.setDate(today.getDate() + i);
-    const dateStr = normDate(d); // format canonique DD/MM/YYYY avec zéros
+    const dateStr = normDate(d);
     const jours = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
     const mois  = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
     days.push({
@@ -4989,24 +4988,30 @@ function renderPrevCalendar() {
       jourNom: jours[d.getDay()],
       mois:    mois[d.getMonth()],
       isToday: i === 0,
+      isFuture: i > 0,
     });
   }
 
   strip.innerHTML = days.map(day => {
     const vac = getPrevVac(day.dateStr);
-    const hasData = !!(vac && vac.routes && vac.routes.some(r => r.membres && r.membres.length > 0));
+    // Point vert = vacation enregistrée (avec ou sans agents)
+    const hasData = !!vac;
+    const hasAgents = !!(vac && vac.routes && vac.routes.some(r => r.membres && r.membres.length > 0));
     const isActive = prevSelectedDate === day.dateStr;
+    const dotColor = hasAgents ? '#34d399' : hasData ? '#fbbf24' : 'transparent';
+    const dotGlow  = hasAgents ? 'box-shadow:0 0 5px #34d399' : hasData ? 'box-shadow:0 0 4px #fbbf24' : '';
     return `<button onclick="prevSelectDay('${day.dateStr}')"
       style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:3px;
         padding:8px 12px;border-radius:10px;cursor:pointer;transition:all .15s;
         font-family:'Inter',sans-serif;min-width:56px;
         background:${isActive ? 'rgba(192,132,252,.22)' : 'var(--surface)'};
         border:1px solid ${isActive ? 'rgba(192,132,252,.55)' : day.isToday ? 'rgba(192,132,252,.35)' : 'var(--border)'};
+        opacity:${day.isFuture && !hasData ? '0.7' : '1'};
       ">
       <span style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:${isActive?'#e9d5ff':day.isToday?'#c084fc':'var(--text-3)'};font-weight:600">${day.jourNom}</span>
       <span style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:${isActive?'#c084fc':day.isToday?'#a855f7':'var(--text-primary)'}">${day.num}</span>
       <span style="font-size:9px;color:${isActive?'#e9d5ff':'var(--text-3)'}">${day.mois}</span>
-      <span style="width:6px;height:6px;border-radius:50%;margin-top:2px;background:${hasData?'#34d399':'transparent'};${hasData?'box-shadow:0 0 5px #34d399':''}"></span>
+      <span style="width:6px;height:6px;border-radius:50%;margin-top:2px;background:${dotColor};${dotGlow}"></span>
     </button>`;
   }).join('');
 
@@ -5116,7 +5121,7 @@ function renderPrevDayContainer() {
 
   const vac = getPrevVac(prevSelectedDate);
 
-  if (!vac || !vac.routes || !vac.routes.some(r => r.membres && r.membres.length > 0)) {
+  if (!vac) {
     el.innerHTML = `<div style="text-align:center;padding:48px;color:var(--text-2);font-size:13px">
       <div style="font-size:36px;margin-bottom:10px">📋</div>
       <div>Aucune vacation enregistrée pour le <strong style="color:#c084fc">${prevSelectedDate}</strong></div>
