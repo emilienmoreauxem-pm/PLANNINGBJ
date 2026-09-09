@@ -4738,6 +4738,197 @@ function _buildOverviewHTML() {
   `;
 }
 
+function planningGoToday() {
+  prevSelectDay(normDate(new Date()));
+}
+
+let prevSelectedDate = normDate(new Date());
+let prevActiveSection = 'routes';
+
+function renderPrevCalendar() {
+  const strip = document.getElementById('prev-calendar-strip');
+  if (!strip) return;
+
+  const today = new Date();
+  const days = [];
+  for (let i = -15; i <= 45; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    const dateStr = normDate(d);
+    const jours = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+    const mois  = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+    days.push({ dateStr, num:d.getDate(), jourNom:jours[d.getDay()], mois:mois[d.getMonth()], isToday:i===0, isFuture:i>0 });
+  }
+
+  strip.innerHTML = days.map(day => {
+    const vac = getPrevVac(day.dateStr);
+    const hasData   = !!vac;
+    const hasAgents = !!(vac && vac.routes && vac.routes.some(r => r.membres && r.membres.length > 0));
+    const isActive  = prevSelectedDate === day.dateStr;
+    const dotColor  = hasAgents ? '#34d399' : hasData ? '#fbbf24' : 'transparent';
+    const dotGlow   = hasAgents ? 'box-shadow:0 0 5px #34d399' : hasData ? 'box-shadow:0 0 4px #fbbf24' : '';
+    return `<button onclick="prevSelectDay('${day.dateStr}')"
+      style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:3px;
+        padding:8px 12px;border-radius:10px;cursor:pointer;transition:all .15s;
+        font-family:'Inter',sans-serif;min-width:56px;
+        background:${isActive?'rgba(192,132,252,.22)':'var(--surface)'};
+        border:1px solid ${isActive?'rgba(192,132,252,.55)':day.isToday?'rgba(192,132,252,.35)':'var(--border)'};
+        opacity:${day.isFuture && !hasData ? '0.7' : '1'}">
+      <span style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:${isActive?'#e9d5ff':day.isToday?'#c084fc':'var(--text-3)'};font-weight:600">${day.jourNom}</span>
+      <span style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:${isActive?'#c084fc':day.isToday?'#a855f7':'var(--text-primary)'}">${day.num}</span>
+      <span style="font-size:9px;color:${isActive?'#e9d5ff':'var(--text-3)'}">${day.mois}</span>
+      <span style="width:6px;height:6px;border-radius:50%;margin-top:2px;background:${dotColor};${dotGlow}"></span>
+    </button>`;
+  }).join('');
+
+  setTimeout(() => {
+    const todayBtn = strip.children[15];
+    if (todayBtn) todayBtn.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' });
+  }, 50);
+}
+
+function prevSelectDay(dateStr) {
+  prevSelectedDate = dateStr;
+  renderPrevCalendar();
+  renderPrevDayContainer();
+}
+
+function renderPrevDayContainer() {
+  const el = document.getElementById('prev-day-container');
+  if (!el) return;
+
+  if (!prevSelectedDate) {
+    el.innerHTML = `<div style="text-align:center;padding:60px;color:var(--text-2);font-size:13px">
+      <div style="font-size:40px;margin-bottom:12px">📅</div>
+      Cliquez sur un jour pour voir la vacation enregistrée.
+    </div>`;
+    return;
+  }
+
+  const vac = getPrevVac(prevSelectedDate);
+
+  if (!vac) {
+    el.innerHTML = `<div style="text-align:center;padding:48px;color:var(--text-2);font-size:13px">
+      <div style="font-size:36px;margin-bottom:10px">📋</div>
+      <div>Aucune vacation enregistrée pour le <strong style="color:#c084fc">${prevSelectedDate}</strong></div>
+      <div style="margin-top:12px;font-size:12px;color:var(--text-3)">
+        Pour créer ou modifier une vacation, utilisez l'onglet <strong>Création/Modification vacation</strong>
+      </div>
+    </div>`;
+    return;
+  }
+
+  const savedBy  = vac.savedBy || '—';
+  const nbEquip  = (vac.routes||[]).filter(r => r.membres && r.membres.length > 0).length;
+  const nbAgents = new Set((vac.routes||[]).flatMap(r => (r.membres||[]).map(m => m.n))).size;
+
+  const equipCards = (vac.routes||[]).map(r => {
+    if (!r.membres || !r.membres.length) return '';
+    const pr = PAUSES_REPAS.find(p => p.id === r.repas);
+    const membres = r.membres.map(m => {
+      const isChef = m.n === r.chef;
+      return `<div style="display:flex;align-items:center;gap:7px;padding:4px 0;border-bottom:1px solid var(--border)">
+        <div class="agent-avatar ${isChef?'avatar-amber':'avatar-blue'}" style="width:24px;height:24px;font-size:9px">${initials(m.n||'?')}</div>
+        <span style="font-size:12px;font-weight:${isChef?'600':'400'};color:${isChef?'var(--amber)':'var(--text-1)'}">${m.n}${isChef?' ★':''}
+          ${m.statut?`<span style="font-size:10px;color:#fb923c;margin-left:4px">${m.statut}</span>`:''}
+        </span>
+        <span style="font-size:10px;color:var(--text-3);margin-left:auto">mat.${m.m||'—'}</span>
+      </div>`;
+    }).join('');
+    const phone = r.telephone ? PHONES[r.telephone] : null;
+    return `<div class="route-card">
+      <div class="route-header">
+        <span class="route-title">${r.id}</span>
+        <div style="display:flex;gap:4px;flex-wrap:wrap">
+          ${r.role?`<span class="badge badge-amber">${r.role}</span>`:''}
+          ${r.fourriere?`<span class="badge badge-amber">🚗</span>`:''}
+          ${pr?`<span class="badge ${pr.badge}">${pr.id}</span>`:''}
+          ${phone?`<span class="badge badge-green">📱 ${phone.label}</span>`:''}
+        </div>
+      </div>
+      <div class="route-body">${membres}
+        ${(r.zones||[]).length?`<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">${r.zones.map(z=>`<span class="badge badge-cyan">${z}</span>`).join('')}</div>`:''}
+        ${phone?`<div style="font-size:11px;color:#6ee7b7;margin-top:4px">📱 ${phone.num}</div>`:''}
+        ${r.consignes?`<div style="font-size:11px;color:var(--text-2);margin-top:4px;font-style:italic">${r.consignes.replace(/\n/g,'<br>')}</div>`:''}
+        ${(r.missionsSpec||[]).filter(Boolean).length?`<div style="margin-top:4px">${r.missionsSpec.filter(Boolean).map(ms=>`<div style="font-size:11px;color:#fbbf24">⚡ ${ms}</div>`).join('')}</div>`:''}
+      </div>
+    </div>`;
+  }).filter(Boolean).join('');
+
+  const posteTypes = [
+    { key:'accueil', label:'🏠 Accueil', color:'#a78bfa' },
+    { key:'csu', label:'📡 CSU', color:'#34d399' },
+    { key:'chefposte', label:'⭐ Chef de Poste', color:'#f87171' },
+  ];
+  const postesHTML = posteTypes.map(p => {
+    const list = (vac.postes?.[p.key]||[]).filter(e=>e.nom);
+    if (!list.length) return '';
+    return `<div class="post-section" style="padding:10px 14px;margin-bottom:0">
+      <div style="font-size:12px;font-weight:700;color:${p.color};margin-bottom:7px">${p.label}</div>
+      ${list.map(e=>{
+        const pr2 = PAUSES_REPAS.find(pp=>pp.id===e.repas);
+        return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0">
+          <div class="post-agent-avatar" style="background:${p.color}22;color:${p.color}">${initials(e.nom||'?')}</div>
+          <span style="font-size:13px">${e.nom}${e.chefSalle?' ★':''}</span>
+          ${pr2?`<span class="badge badge-gray" style="font-size:10px;margin-left:auto">${pr2.id}</span>`:''}
+        </div>`;
+      }).join('')}
+    </div>`;
+  }).filter(Boolean).join('');
+
+  el.innerHTML = `
+    <div style="background:var(--surface);border:1px solid rgba(192,132,252,.3);border-radius:var(--radius);padding:14px 18px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:#c084fc">📅 ${prevSelectedDate}</div>
+        <div style="font-size:11px;color:var(--text-2);margin-top:2px">${nbEquip} équipage(s) · ${nbAgents} agent(s)${savedBy!=='—'?' · Enregistré par '+savedBy:''}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${editMode?`<button onclick="planningLoadToPrep('${prevSelectedDate}')" style="background:rgba(192,132,252,.15);border:1px solid rgba(192,132,252,.4);color:#c084fc;padding:6px 14px;border-radius:var(--radius-sm);font-size:12px;cursor:pointer;font-family:'Inter',sans-serif">✏ Modifier</button>`:''}
+        <button onclick="planningPrintDay('${prevSelectedDate}')" style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);color:#fbbf24;padding:6px 14px;border-radius:var(--radius-sm);font-size:12px;cursor:pointer;font-family:'Inter',sans-serif">🖨 Imprimer</button>
+      </div>
+    </div>
+    <div class="section-title">Équipages</div>
+    <div class="route-grid" style="margin-bottom:16px">${equipCards||'<div style="color:var(--text-2);font-size:13px">Aucun équipage</div>'}</div>
+    ${postesHTML?`<div class="section-title">Postes fixes</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:16px">${postesHTML}</div>`:''}
+  `;
+}
+
+function planningLoadToPrep(dateStr) {
+  if (!editMode) { alertLock(); return; }
+  const vac = getPrevVac(dateStr);
+  if (!vac) return;
+  const parts = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  const isoDate = parts ? `${parts[3]}-${parts[2]}-${parts[1]}` : '';
+  routesData.length = 0;
+  (vac.routes||[]).forEach(r => routesData.push(JSON.parse(JSON.stringify(r))));
+  if (vac.postes) { Object.keys(postesData).forEach(k => { postesData[k] = []; }); Object.assign(postesData, JSON.parse(JSON.stringify(vac.postes))); }
+  showTab('preparee');
+  const picker = document.getElementById('prep-date-picker');
+  if (picker && isoDate) { picker.value = isoDate; document.getElementById('prep-date-status').innerHTML = `<span style="color:#6ee7b7">✓ Vacation du ${dateStr} chargée</span>`; }
+  renderPrepVacation();
+}
+
+function planningPrintDay(dateStr) {
+  const vac = getPrevVac(dateStr);
+  if (!vac) return;
+  const savedRoutes = JSON.parse(JSON.stringify(routesData));
+  const savedPostes = JSON.parse(JSON.stringify(postesData));
+  const savedMissions = JSON.parse(JSON.stringify(regularMissions));
+  routesData.length = 0; (vac.routes||[]).forEach(r => routesData.push(r));
+  Object.assign(postesData, vac.postes || {});
+  regularMissions.length = 0; (vac.missions||[]).forEach(m => regularMissions.push(m));
+  printPrepOverview();
+  routesData.length = 0; savedRoutes.forEach(r => routesData.push(r));
+  Object.assign(postesData, savedPostes);
+  regularMissions.length = 0; savedMissions.forEach(m => regularMissions.push(m));
+}
+
+function getPrevVac(dateStr) {
+  if (!dateStr || !prevVacations) return null;
+  const norm = normDate(dateStr);
+  return prevVacations.find(v => normDate(v.dateStr||v.date||'') === norm);
+}
+
 function printPrepOverview() {
   const body = _buildOverviewHTML();
   const css = document.querySelector('style#overview-css')?.textContent || _getOverviewCSS();
