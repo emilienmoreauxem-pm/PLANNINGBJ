@@ -1747,9 +1747,17 @@ function renderVacationJour(targetISO) {
 
   // Équipages (lecture seule)
   const equipGrid = document.getElementById('vj-equip-grid');
-  if (equipGrid) equipGrid.innerHTML = !vjRoutes.length
-    ? `<div style="color:var(--text-2);font-size:13px;padding:16px 0">Aucun équipage enregistré pour cette date.</div>`
-    : vjRoutes.map(r => {
+  if (equipGrid) {
+    if (!vacAujourdhui) {
+      equipGrid.innerHTML = `<div style="color:var(--text-2);font-size:13px;padding:8px 0;grid-column:1/-1">
+        ${isToday
+          ? '⚠ Aucune vacation enregistrée pour aujourd\'hui. Allez dans <b>Création/Modification vacation</b> pour en créer une.'
+          : '⚠ Aucune vacation enregistrée pour cette date.'}
+      </div>`;
+    } else if (!vjRoutes.length) {
+      equipGrid.innerHTML = `<div style="color:var(--text-2);font-size:13px;padding:8px 0">Aucun équipage pour cette vacation.</div>`;
+    } else {
+      equipGrid.innerHTML = vjRoutes.map(r => {
     const pr = PAUSES_REPAS.find(p => p.id === r.repas);
     const roleB  = r.role     ? `<span class="badge badge-amber">${r.role}</span>` : '';
     const fourB  = r.fourriere ? `<span class="badge badge-amber">🚗 Fourrière</span>` : '';
@@ -1771,7 +1779,9 @@ function renderVacationJour(targetISO) {
         ${(r.zones||[]).length ? `<div class="equip-meta">${(r.zones||[]).map(z=>`<span class="badge badge-cyan">${z}</span>`).join('')}</div>` : ''}
       </div>
     </div>`;
-  }).join('');
+      }).join('');
+    }
+  }
 
   // Stats
   const agentsPresents = new Set();
@@ -2711,17 +2721,28 @@ function _matchAgentToPlanning(agentNom, planningList) {
     container.innerHTML = r.membres.map((m, i) => {
       const isChef  = m.n === r.chef;
       const avail   = available.length ? _matchAgentToPlanning(m.n, available) : null;
-      const isSpecial = ['SPORT','FE','DEPART AVANCE'].includes(m.n);
+      const isSpecial = !!m.statut;
 
-      const borderColor = isSpecial ? 'rgba(251,146,60,.3)' : avail === true ? 'rgba(16,185,129,.35)' : avail === false ? 'rgba(239,68,68,.3)' : 'transparent';
-      const bgColor     = isSpecial ? 'rgba(251,146,60,.05)' : avail === true ? 'rgba(16,185,129,.06)' : avail === false ? 'rgba(239,68,68,.06)' : 'rgba(255,255,255,.03)';
-      const availBadge  = isSpecial
-        ? `<span style="font-size:10px;color:#fb923c;background:rgba(251,146,60,.1);border:1px solid rgba(251,146,60,.3);padding:1px 6px;border-radius:4px;margin-left:4px">📋 ${m.n}</span>`
-        : avail === true
+      // Badge disponibilité / statut
+      const statutIcons = { 'SPORT':'🏃', 'FE':'📋', 'DEPART AVANCE':'⏰' };
+      const statutTxt   = m.statut === 'DEPART AVANCE' ? 'Départ avancé' : (m.statut || '');
+      const statutBadge = m.statut
+        ? '<span style="font-size:10px;color:#fb923c;background:rgba(251,146,60,.1);border:1px solid rgba(251,146,60,.3);padding:1px 8px;border-radius:4px;margin-left:4px;font-weight:600">'+(statutIcons[m.statut]||'📌')+' '+statutTxt+'</span>'
+        : '';
+      const availBadge = statutBadge || (avail === true
         ? '<span style="font-size:10px;color:#6ee7b7;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);padding:1px 6px;border-radius:4px;margin-left:4px">✓ Présent</span>'
         : avail === false
         ? '<span style="font-size:10px;color:#fca5a5;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);padding:1px 6px;border-radius:4px;margin-left:4px">✗ Absent</span>'
-        : '';
+        : '');
+
+      const borderColor = isSpecial ? 'rgba(251,146,60,.3)' : avail === true ? 'rgba(16,185,129,.35)' : avail === false ? 'rgba(239,68,68,.3)' : 'transparent';
+      const bgColor     = isSpecial ? 'rgba(251,146,60,.05)' : avail === true ? 'rgba(16,185,129,.06)' : avail === false ? 'rgba(239,68,68,.06)' : 'rgba(255,255,255,.03)';
+
+      // Bouton statut
+      const statutBtnLabel = m.statut ? (statutIcons[m.statut]||'📌')+' '+(m.statut==='DEPART AVANCE'?'Dép. avancé':m.statut) : '📌';
+      const statutBtnStyle = m.statut
+        ? 'background:rgba(251,146,60,.2);border:1px solid rgba(251,146,60,.5);color:#fb923c;font-weight:700'
+        : 'background:var(--surface);border:1px solid var(--border);color:var(--text-3)';
 
       return `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;border-radius:8px;padding:7px 8px;border:1px solid ${borderColor};background:${bgColor}">
         <div class="agent-avatar ${isChef?'avatar-amber':'avatar-blue'}" style="flex-shrink:0;width:28px;height:28px;font-size:10px">${initials(m.n||'?')}</div>
@@ -2734,6 +2755,10 @@ function _matchAgentToPlanning(agentNom, planningList) {
         <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--amber);white-space:nowrap;cursor:pointer;padding:3px 7px;border-radius:5px;border:1px solid ${isChef?'rgba(245,158,11,.4)':'transparent'};background:${isChef?'rgba(245,158,11,.1)':'transparent'}">
           <input type="radio" name="chef-radio" ${isChef?'checked':''} onchange="setChefIdx(${i})"> Chef
         </label>
+        <button title="${m.statut?'Retirer le statut':'Attribuer un statut'}" onclick="cycleStatut(${i})"
+          style="font-size:10px;padding:3px 7px;border-radius:5px;cursor:pointer;font-family:'Inter',sans-serif;white-space:nowrap;${statutBtnStyle}">
+          ${statutBtnLabel || '📌'}
+        </button>
         <button style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#fca5a5;cursor:pointer;font-size:13px;padding:3px 7px;border-radius:5px" onclick="removeMembre(${i})">✕</button>
       </div>`;
     }).join('');
@@ -2821,6 +2846,15 @@ function _matchAgentToPlanning(agentNom, planningList) {
     refreshEditMembres();
   }
 
+  function cycleStatut(idx) {
+    const r = routesData[editingRouteIdx];
+    const statuts = [null, 'SPORT', 'FE', 'DEPART AVANCE'];
+    const current = r.membres[idx]?.statut || null;
+    const nextIdx = (statuts.indexOf(current) + 1) % statuts.length;
+    r.membres[idx].statut = statuts[nextIdx];
+    refreshEditMembres();
+  }
+
   function removeMembre(idx) {
     const r = routesData[editingRouteIdx];
     if (r.chef === r.membres[idx]?.n) r.chef = r.membres.find((_,i)=>i!==idx)?.n || '—';
@@ -2836,8 +2870,53 @@ function _matchAgentToPlanning(agentNom, planningList) {
   }
 
   function addStatutSpecial(statut) {
-    routesData[editingRouteIdx].membres.push({ n: statut, m: '' });
-    _cachedAgentCount = -1;
+    const r = routesData[editingRouteIdx];
+    if (!r.membres.length) {
+      alert('Ajoutez d\'abord un agent, puis attribuez-lui le statut.');
+      return;
+    }
+    if (r.membres.length === 1) {
+      // Un seul agent → appliquer directement
+      r.membres[0].statut = r.membres[0].statut === statut ? null : statut;
+      refreshEditMembres();
+    } else {
+      // Plusieurs agents → modale de choix
+      const modal = document.createElement('div');
+      modal.className = 'modal-overlay open';
+      modal.style.zIndex = '10002';
+      const icons = { 'SPORT':'🏃', 'FE':'📋', 'DEPART AVANCE':'⏰' };
+      const labels = { 'SPORT':'SPORT', 'FE':'FE', 'DEPART AVANCE':'Départ avancé' };
+      const options = r.membres.map((m,i) =>
+        `<button onclick="setMembreStatut(${i},'${statut}');this.closest('.modal-overlay').remove()"
+          style="width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);color:var(--text-1);
+          padding:10px 14px;border-radius:8px;cursor:pointer;font-family:'Inter',sans-serif;font-size:13px;
+          display:flex;align-items:center;gap:10px;margin-bottom:6px"
+          onmouseover="this.style.borderColor='rgba(251,146,60,.5)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div class="agent-avatar ${m.n===r.chef?'avatar-amber':'avatar-blue'}" style="width:28px;height:28px;font-size:10px">${initials(m.n||'?')}</div>
+          <span>${m.n}</span>
+          ${m.statut ? `<span style="font-size:10px;color:#fb923c;margin-left:auto">${m.statut}</span>` : ''}
+        </button>`
+      ).join('');
+      modal.innerHTML = `<div class="modal" style="width:360px;max-width:95vw">
+        <div class="modal-title">
+          <span>${icons[statut]} Attribuer <strong style="color:#fb923c">${labels[statut]}</strong> à :</span>
+          <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">✕</button>
+        </div>
+        <div style="margin-top:4px">${options}</div>
+        <div style="margin-top:8px">
+          <button class="btn-secondary" onclick="this.closest('.modal-overlay').remove()" style="width:100%">Annuler</button>
+        </div>
+      </div>`;
+      modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
+      document.body.appendChild(modal);
+    }
+  }
+
+  function setMembreStatut(idx, statut) {
+    const r = routesData[editingRouteIdx];
+    if (!r.membres[idx]) return;
+    // Toggle : cliquer deux fois retire le statut
+    r.membres[idx].statut = r.membres[idx].statut === statut ? null : statut;
     refreshEditMembres();
   }
   function addSpecMissionRow(text) {
@@ -4456,1942 +4535,6 @@ function viewRoute(idx) {
   win.document.close();
 }
 
-// ════════════════════════════════════════════
-//  PRINT PAR FEUILLE DE ROUTE
-// ════════════════════════════════════════════
-
-function printRoute(idx) {
-  const r = routesData[idx];
-  const pr = PAUSES_REPAS.find(p => p.id === r.repas);
-  const repasLabel = pr ? `${pr.id} — ${pr.midi}` : (r.repas || '—');
-  const shift = document.querySelector('.shift-badge').textContent.trim();
-
-  const membresHTML = r.membres.length ? r.membres.map(m => {
-    const ag = agents.find(a => a.nom === m.n) || {};
-    const isChef = m.n === r.chef;
-    return `<tr>
-      <td style="font-weight:${isChef ? '700' : '400'}">${m.n}${isChef ? ' ★' : ''}</td>
-      <td>${m.m || ag.mat || '—'}</td>
-      <td>${ag.radio || '—'}</td>
-      <td>${ag.tonfa != null ? ag.tonfa : '—'}</td>
-      <td>${ag.lacry != null ? ag.lacry : '—'}</td>
-      <td>${ag.psa || '—'}</td>
-    </tr>`;
-  }).join('') : '<tr><td colspan="6" style="color:#888">Aucun agent</td></tr>';
-
-  const zonesHTML = (r.zones||[]).length ? r.zones.join(', ') : '—';
-  const regMissHTML = regularMissions.map(m => `<li>${m}</li>`).join('');
-  const specMissHTML = (r.missionsSpec||[]).length ? (r.missionsSpec||[]).map(m => `<li>${m}</li>`).join('') : '';
-  const consHTML = r.consignes ? r.consignes.replace(/\n/g,'<br>') : '';
-
-  const win = window.open('', '_blank', 'width=900,height=700');
-  win.document.write(`<!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="UTF-8">
-<title>Feuille de route — ${r.id}</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Inter', Arial, sans-serif; font-size: 12px; color: #111; background: white; padding: 20px 28px; }
-  .print-header { display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 3px solid #0a0f2c; padding-bottom: 12px; margin-bottom: 16px; }
-  .print-org { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #555; margin-bottom: 4px; }
-  .print-title { font-size: 22px; font-weight: 700; color: #0a0f2c; letter-spacing: 0.02em; }
-  .print-sub { font-size: 11px; color: #666; margin-top: 3px; }
-  .print-meta { text-align: right; font-size: 11px; color: #555; line-height: 1.7; }
-  .print-meta strong { color: #111; font-size: 13px; }
-  .section { margin-bottom: 14px; }
-  .section-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: #0a0f2c; border-bottom: 1.5px solid #0a0f2c; padding-bottom: 3px; margin-bottom: 8px; }
-  table { width: 100%; border-collapse: collapse; font-size: 11px; }
-  th { background: #0a0f2c; color: white; padding: 5px 8px; text-align: left; font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; }
-  td { padding: 5px 8px; border-bottom: 1px solid #ddd; }
-  tr:last-child td { border-bottom: none; }
-  tr:nth-child(even) td { background: #f8f9fb; }
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; letter-spacing: 0.04em; }
-  .badge-role { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
-  .badge-repas { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
-  .badge-fourr { background: #fffbeb; color: #b45309; border: 1px solid #fcd34d; }
-  .missions-list { list-style: none; padding: 0; }
-  .missions-list li { padding: 3px 0 3px 14px; border-bottom: 1px solid #eee; font-size: 11px; line-height: 1.4; position: relative; }
-  .missions-list li::before { content: '›'; position: absolute; left: 0; color: #2563eb; font-size: 14px; line-height: 1; }
-  .missions-list li:last-child { border-bottom: none; }
-  .consignes-box { background: #f8f9fb; border-left: 3px solid #2563eb; padding: 8px 12px; border-radius: 0 6px 6px 0; font-size: 11px; line-height: 1.6; color: #333; }
-  .info-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 14px; }
-  .info-cell { background: #f8f9fb; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 10px; }
-  .info-cell-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.07em; color: #888; margin-bottom: 3px; }
-  .info-cell-val { font-size: 13px; font-weight: 600; color: #0a0f2c; }
-  .footer { margin-top: 24px; border-top: 1px solid #ddd; padding-top: 10px; display: flex; justify-content: space-between; font-size: 10px; color: #888; }
-  .sign-area { display: flex; gap: 24px; margin-top: 16px; }
-  .sign-box { flex: 1; border: 1px solid #ccc; border-radius: 6px; height: 60px; position: relative; }
-  .sign-label { position: absolute; top: -9px; left: 10px; background: white; padding: 0 4px; font-size: 10px; color: #888; }
-  @media print {
-    body { padding: 12px 18px; }
-    button { display: none !important; }
-  }
-</style>
-</head>
-<body>
-<div class="print-header">
-  <div>
-    <div class="print-org">Police Municipale · Neuilly-sur-Seine</div>
-    <div class="print-title">Feuille de Route — ${r.id}</div>
-    <div class="print-sub">Vacation : ${shift}</div>
-  </div>
-  <div class="print-meta">
-    <div><strong>${r.id}</strong></div>
-    <div>Chef d'équipage : <strong>${r.chef}</strong></div>
-    ${r.role ? `<div><span class="badge badge-role">${r.role}</span></div>` : ''}
-    ${r.fourriere ? `<div><span class="badge badge-fourr">🚗 Fourrière</span></div>` : ''}
-    <div style="margin-top:4px"><span class="badge badge-repas">${repasLabel}</span></div>
-  </div>
-</div>
-
-<div class="info-grid">
-  <div class="info-cell">
-    <div class="info-cell-label">Équipage</div>
-    <div class="info-cell-val">${r.id}</div>
-  </div>
-  <div class="info-cell">
-    <div class="info-cell-label">Zones d'attribution</div>
-    <div class="info-cell-val" style="font-size:11px">${zonesHTML}</div>
-  </div>
-  <div class="info-cell">
-    <div class="info-cell-label">Pause repas</div>
-    <div class="info-cell-val" style="font-size:11px">${repasLabel}</div>
-  </div>
-</div>
-
-<div class="section">
-  <div class="section-title">Composition de l'équipage</div>
-  <table>
-    <thead><tr><th>NOM</th><th>Matricule</th><th>Radio</th><th>Tonfa</th><th>Lacry</th><th>PSA</th></tr></thead>
-    <tbody>${membresHTML}</tbody>
-  </table>
-</div>
-
-<div class="section">
-  <div class="section-title">Missions régulières</div>
-  <ul class="missions-list">${regMissHTML}</ul>
-</div>
-
-${specMissHTML ? `<div class="section">
-  <div class="section-title">Missions spécifiques</div>
-  <ul class="missions-list">${specMissHTML}</ul>
-</div>` : ''}
-
-${consHTML ? `<div class="section">
-  <div class="section-title">Consignes spécifiques</div>
-  <div class="consignes-box">${consHTML}</div>
-</div>` : ''}
-
-<div class="sign-area">
-  <div class="sign-box"><div class="sign-label">Signature chef d'équipage</div></div>
-  <div class="sign-box"><div class="sign-label">Visa responsable</div></div>
-</div>
-
-<div class="footer">
-  <span>Police Municipale · Neuilly-sur-Seine</span>
-  <span>Généré le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'})}</span>
-</div>
-
-<script>window.onload = () => window.print();<\/script>
-</body></html>`);
-  win.document.close();
-}
-
-// ════════════════════════════════════════════
-//  VUE MOBILE (générée depuis les données live)
-// ════════════════════════════════════════════
-
-function openMobileView() {
-  const shift = document.querySelector('.shift-badge').textContent.trim();
-  const today = new Date().toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
-
-  // Sérialiser les données live pour injection dans la page mobile
-  const dataScript = `
-    const regularMissions = ${JSON.stringify(regularMissions)};
-    const agents = ${JSON.stringify(agents)};
-    const routesData = ${JSON.stringify(routesData)};
-    const PAUSES_REPAS = ${JSON.stringify(PAUSES_REPAS)};
-    const SHIFT = ${JSON.stringify(shift)};
-    const TODAY = ${JSON.stringify(today)};
-  `;
-
-  const win = window.open('', '_blank');
-  win.document.write(`<!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Feuilles de Route — PM Mobile</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --navy:#0a0f2c; --navy-card:#161d4a;
-    --blue:#2563eb; --cyan:#06b6d4;
-    --amber:#f59e0b; --green:#10b981; --red:#ef4444;
-    --text:#f1f5f9; --text2:#94a3b8; --text3:#475569;
-    --border:rgba(148,163,184,0.14); --border2:rgba(148,163,184,0.28);
-    --card:rgba(22,29,74,0.85);
-  }
-  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-  body{background:var(--navy);color:var(--text);font-family:'Inter',sans-serif;font-size:14px;line-height:1.5;min-height:100vh;padding-bottom:80px;}
-  .bg-grid{position:fixed;inset:0;pointer-events:none;z-index:0;background-image:linear-gradient(rgba(37,99,235,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(37,99,235,0.04) 1px,transparent 1px);background-size:40px 40px;}
-  .wrap{position:relative;z-index:1;}
-  /* Header */
-  .m-header{padding:14px 16px 12px;background:linear-gradient(180deg,rgba(22,29,74,0.97) 0%,rgba(10,15,44,0.85) 100%);border-bottom:1px solid var(--border2);position:sticky;top:0;z-index:50;backdrop-filter:blur(12px);}
-  .m-header-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;}
-  .m-logo{display:flex;align-items:center;gap:10px;}
-  .m-logo-badge{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#1e40af,#2563eb);display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:14px;color:#fff;border:1px solid rgba(96,165,250,0.4);flex-shrink:0;}
-  .m-logo-text .m-title{font-family:'Syne',sans-serif;font-size:13px;font-weight:700;}
-  .m-logo-text .m-sub{font-size:10px;color:var(--text2);letter-spacing:.04em;text-transform:uppercase;}
-  .m-shift{font-family:'DM Mono',monospace;font-size:11px;color:var(--amber);background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.25);padding:5px 10px;border-radius:6px;white-space:nowrap;}
-  .m-date{font-family:'DM Mono',monospace;font-size:11px;color:var(--cyan);text-align:center;background:rgba(6,182,212,0.08);border:1px solid rgba(6,182,212,0.2);padding:6px 12px;border-radius:7px;}
-  /* Tabs */
-  .m-equip-tabs{display:flex;gap:6px;padding:10px 14px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
-  .m-equip-tabs::-webkit-scrollbar{display:none;}
-  .m-equip-tab{flex-shrink:0;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--border2);color:var(--text2);background:transparent;font-family:'Inter',sans-serif;transition:all .15s;white-space:nowrap;}
-  .m-equip-tab.active{color:#fff;background:rgba(37,99,235,0.28);border-color:rgba(37,99,235,0.5);}
-  /* Panels */
-  .m-route-panel{display:none;padding:0 12px;}
-  .m-route-panel.active{display:block;}
-  /* Route header card */
-  .m-route-header{background:linear-gradient(135deg,rgba(6,182,212,0.12) 0%,rgba(22,29,74,0.9) 100%);border:1px solid rgba(6,182,212,0.25);border-radius:14px;padding:16px 16px;margin:12px 0;}
-  .m-route-id{font-family:'Syne',sans-serif;font-size:26px;font-weight:800;color:var(--cyan);letter-spacing:.02em;margin-bottom:4px;}
-  .m-route-chef{font-size:12px;color:var(--text2);margin-bottom:10px;}
-  .m-route-chef strong{color:var(--text);}
-  .m-route-meta{display:flex;gap:6px;flex-wrap:wrap;}
-  /* Badges */
-  .mb{display:inline-flex;align-items:center;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;letter-spacing:.03em;white-space:nowrap;}
-  .mb-amber{background:rgba(245,158,11,0.15);color:#fcd34d;border:1px solid rgba(245,158,11,0.3);}
-  .mb-blue{background:rgba(37,99,235,0.15);color:#93c5fd;border:1px solid rgba(37,99,235,0.3);}
-  .mb-cyan{background:rgba(6,182,212,0.12);color:#67e8f9;border:1px solid rgba(6,182,212,0.25);}
-  .mb-green{background:rgba(16,185,129,0.12);color:#6ee7b7;border:1px solid rgba(16,185,129,0.25);}
-  .mb-gray{background:rgba(148,163,184,0.1);color:var(--text2);border:1px solid var(--border);}
-  /* Cards */
-  .m-card{background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:10px;overflow:hidden;backdrop-filter:blur(8px);}
-  .m-card-header{padding:10px 14px;background:rgba(37,99,235,0.1);border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text2);font-weight:700;display:flex;align-items:center;gap:8px;}
-  .m-card-header::before{content:'';width:3px;height:12px;border-radius:2px;background:var(--blue);display:block;flex-shrink:0;}
-  .m-card-body{padding:10px 14px;}
-  /* Membres */
-  .m-membre{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;background:rgba(255,255,255,0.03);border:1px solid var(--border);margin-bottom:7px;}
-  .m-membre:last-child{margin-bottom:0;}
-  .m-membre.m-chef{border-color:rgba(245,158,11,0.3);background:rgba(245,158,11,0.06);}
-  .m-avatar{width:36px;height:36px;border-radius:9px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;background:rgba(37,99,235,0.2);color:#93c5fd;border:1px solid rgba(37,99,235,0.3);}
-  .m-chef .m-avatar{background:rgba(245,158,11,0.2);color:#fcd34d;border-color:rgba(245,158,11,0.35);}
-  .m-membre-nom{font-size:13px;font-weight:600;color:var(--text);}
-  .m-membre-det{font-size:10px;color:var(--text2);font-family:'DM Mono',monospace;margin-top:2px;}
-  /* Zones */
-  .m-zones{display:flex;gap:6px;flex-wrap:wrap;}
-  /* Missions */
-  .m-mission{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px;}
-  .m-mission:last-child{border-bottom:none;padding-bottom:0;}
-  .m-mnum{font-family:'DM Mono',monospace;font-size:10px;color:var(--cyan);background:rgba(6,182,212,0.1);padding:3px 7px;border-radius:4px;border:1px solid rgba(6,182,212,0.2);white-space:nowrap;flex-shrink:0;margin-top:2px;}
-  /* Consignes */
-  .m-consignes{font-size:13px;color:var(--text2);line-height:1.7;padding:10px 12px;background:rgba(255,255,255,0.02);border-radius:8px;border-left:3px solid rgba(37,99,235,0.5);}
-  /* Bottom bar */
-  .m-bottom-bar{position:fixed;bottom:0;left:0;right:0;z-index:50;background:rgba(17,22,64,0.97);border-top:1px solid var(--border2);backdrop-filter:blur(12px);padding:10px 16px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;}
-  .m-bottom-info{font-size:11px;color:var(--text3);}
-  .m-bottom-info strong{color:var(--text2);}
-  .m-print-btn{background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.3);color:#6ee7b7;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;white-space:nowrap;}
-  .m-empty-equip{padding:18px 14px;color:var(--text3);font-size:12px;text-align:center;}
-  @media print{
-    .m-header,.m-equip-tabs,.m-bottom-bar{display:none!important;}
-    .m-route-panel{display:block!important;}
-    body{background:white;color:#111;padding:0;}
-    .bg-grid{display:none;}
-    .m-route-header{background:#f0f4ff;border-color:#93c5fd;}
-    .m-route-id{color:#1e40af;}
-    .m-card{background:#f8f9fb;border-color:#e2e8f0;break-inside:avoid;}
-    .m-card-header{background:#e8ecf8;}
-    .m-mnum{color:#2563eb;background:#dbeafe;border-color:#bfdbfe;}
-  }
-</style>
-</head>
-<body>
-<div class="bg-grid"></div>
-<div class="wrap">
-  <div class="m-header">
-    <div class="m-header-top">
-      <div class="m-logo">
-        <div class="m-logo-badge">PM</div>
-        <div class="m-logo-text">
-          <div class="m-title">Feuilles de Route</div>
-          <div class="m-sub">Police Municipale · Brigade Jour</div>
-        </div>
-      </div>
-      <div class="m-shift" id="mShift"></div>
-    </div>
-    <div class="m-date" id="mDate"></div>
-  </div>
-  <div class="m-equip-tabs" id="mTabs"></div>
-  <div id="mPanels"></div>
-</div>
-<div class="m-bottom-bar">
-  <div class="m-bottom-info">
-    <strong id="mBotEquip">—</strong><br>
-    <span id="mBotAgents">—</span>
-  </div>
-  <button class="m-print-btn" onclick="window.print()">🖨 Imprimer</button>
-</div>
-<script>
-${dataScript}
-let cur = 0;
-function ini(n){if(!n||n==='—')return'?';const p=n.trim().split(/[\\s(]/);return(p[0][0]+(p[1]?p[1][0]:'')).toUpperCase();}
-function getAg(nom){return agents.find(a=>a.nom===nom)||{};}
-function render(){
-  document.getElementById('mShift').textContent=SHIFT;
-  document.getElementById('mDate').textContent=TODAY;
-  const tabs=document.getElementById('mTabs');
-  tabs.innerHTML=routesData.map((r,i)=>\`<button class="m-equip-tab\${i===cur?' active':''}" onclick="sel(\${i})">\${r.id}</button>\`).join('');
-  document.getElementById('mPanels').innerHTML=routesData.map((r,i)=>panel(r,i)).join('');
-  updateBot();
-}
-function panel(r,idx){
-  const pr=PAUSES_REPAS.find(p=>p.id===r.repas);
-  const repL=pr?\`\${pr.id} — \${pr.midi}\`:(r.repas||'—');
-  const mems=r.membres.length?r.membres.map(m=>{
-    const ag=getAg(m.n),isC=m.n===r.chef;
-    return \`<div class="m-membre\${isC?' m-chef':''}">
-      <div class="m-avatar">\${ini(m.n)}</div>
-      <div style="flex:1;min-width:0">
-        <div class="m-membre-nom">\${m.n}\${isC?' <span class="mb mb-amber" style="font-size:10px;margin-left:4px">★ Chef</span>':''}</div>
-        <div class="m-membre-det">Mat.\${m.m||ag.mat||'—'} · Radio \${ag.radio||'—'} · Tonfa \${ag.tonfa!=null?ag.tonfa:'—'} · Lacry \${ag.lacry!=null?ag.lacry:'—'}\${ag.psa?' · '+ag.psa:''}</div>
-      </div></div>\`;
-  }).join(''):'<div class="m-empty-equip">Aucun agent assigné</div>';
-  const zones=(r.zones||[]).length?r.zones.map(z=>\`<span class="mb mb-cyan">\${z}</span>\`).join(''):'<span style="color:var(--text3);font-size:12px">—</span>';
-  const regM=regularMissions.map((m,i)=>\`<div class="m-mission"><div class="m-mnum">\${String(i+1).padStart(2,'0')}</div><div>\${m}</div></div>\`).join('');
-  const specM=(r.missionsSpec||[]).length?\`<div class="m-card"><div class="m-card-header">⚡ Missions spécifiques</div><div class="m-card-body">\${r.missionsSpec.map(m=>\`<div class="m-mission"><div style="font-size:14px;flex-shrink:0">⚡</div><div>\${m}</div></div>\`).join('')}</div></div>\`:'';
-  const cons=r.consignes?\`<div class="m-card"><div class="m-card-header">📝 Consignes spécifiques</div><div class="m-card-body"><div class="m-consignes">\${r.consignes.replace(/\\n/g,'<br>')}</div></div></div>\`:'';
-  return \`<div class="m-route-panel\${idx===cur?' active':''}" id="p\${idx}">
-    <div class="m-route-header">
-      <div class="m-route-id">\${r.id}</div>
-      <div class="m-route-chef">Chef : <strong>\${r.chef}</strong></div>
-      <div class="m-route-meta">
-        \${r.role?\`<span class="mb mb-amber">\${r.role}</span>\`:''}
-        \${r.fourriere?'<span class="mb mb-amber">🚗 Fourrière</span>':''}
-        \${pr?\`<span class="mb mb-blue">\${repL}</span>\`:''}
-        <span class="mb mb-gray">\${r.membres.length} agent\${r.membres.length!==1?'s':''}</span>
-      </div>
-    </div>
-    <div class="m-card"><div class="m-card-header">👥 Composition</div><div class="m-card-body" style="padding-top:10px;padding-bottom:10px">\${mems}</div></div>
-    <div class="m-card"><div class="m-card-header">📍 Zones</div><div class="m-card-body"><div class="m-zones">\${zones}</div></div></div>
-    <div class="m-card"><div class="m-card-header">📌 Missions régulières</div><div class="m-card-body">\${regM}</div></div>
-    \${specM}\${cons}
-  </div>\`;
-}
-function sel(i){
-  cur=i;
-  document.querySelectorAll('.m-equip-tab').forEach((t,j)=>t.classList.toggle('active',j===i));
-  document.querySelectorAll('.m-route-panel').forEach((p,j)=>p.classList.toggle('active',j===i));
-  updateBot();
-  window.scrollTo({top:0,behavior:'smooth'});
-}
-function updateBot(){
-  const r=routesData[cur];if(!r)return;
-  document.getElementById('mBotEquip').textContent=r.id;
-  const n=r.membres.map(m=>m.n).join(' · ')||'Aucun agent';
-  document.getElementById('mBotAgents').textContent=n.length>50?n.substring(0,48)+'…':n;
-}
-render();
-<\/script>
-</body></html>`);
-  win.document.close();
-}
-
-// ════════════════════════════════════════════
-//  POSTES FIXES (Accueil, CSU, Chef de Poste)
-// ════════════════════════════════════════════
-
-let postesData = {
-  accueil: [],    // [{ nom: '', repas: '' }, ...]
-  csu: [],        // [{ nom: '', repas: '', chefSalle: false }, ...]
-  chefposte: []
-};
-
-const POSTES_CONFIG = {
-  accueil:   { label: '🏠 Accueil',       color: '#a78bfa', borderColor: 'rgba(167,139,250,0.5)', badgeStyle: 'background:rgba(167,139,250,0.15);color:#a78bfa;border:1px solid rgba(167,139,250,0.35)' },
-  csu:       { label: '📡 CSU',            color: '#34d399', borderColor: 'rgba(52,211,153,0.5)',   badgeStyle: 'background:rgba(52,211,153,0.15);color:#34d399;border:1px solid rgba(52,211,153,0.35)' },
-  chefposte: { label: '⭐ Chef de Poste',  color: '#f87171', borderColor: 'rgba(248,113,113,0.5)', badgeStyle: 'background:rgba(248,113,113,0.15);color:#f87171;border:1px solid rgba(248,113,113,0.35)' }
-};
-
-function getAgentInitials(nom) {
-  if (!nom) return '?';
-  const p = nom.trim().split(/[\s(]/);
-  return (p[0][0] + (p[1] ? p[1][0] : '')).toUpperCase();
-}
-
-// Cache des options agents pour les postes (évite de rebuilder à chaque render)
-let _cachedPosteAgentOpts = '';
-let _cachedPosteAgentCount = 0;
-
-function _getPosteAgentOpts() {
-  if (agents.length !== _cachedPosteAgentCount) {
-    _cachedPosteAgentCount = agents.length;
-    _cachedPosteAgentOpts = agents.map(a =>
-      `<option value="${a.nom}">${a.nom}${a.prenom?' '+a.prenom:''} — mat.${a.mat||'—'}</option>`
-    ).join('');
-  }
-  return '<option value="">— Sélectionner —</option>' + _cachedPosteAgentOpts;
-}
-
-const _repasOpts = () => '<option value="">— Pause —</option>' +
-  PAUSES_REPAS.map(pr => `<option value="${pr.id}">${pr.id} — ${pr.midi}</option>`).join('');
-
-function renderPosteTab(poste) {
-  const list = document.getElementById(poste + '-agents-list');
-  if (!list) return;
-  const cfg = POSTES_CONFIG[poste];
-  const isCsu = poste === 'csu';
-  const agentOpts = _getPosteAgentOpts();
-  const repasOpts = _repasOpts();
-
-  list.innerHTML = postesData[poste].map((entry, i) => {
-    const inits = initials(entry.nom || '?');
-    const chefSalleHtml = isCsu ? `
-      <label class="chef-salle-label ${entry.chefSalle?'active':''}" title="Chef de Salle CSU">
-        <input type="checkbox" ${entry.chefSalle?'checked':''} onchange="toggleChefSalle(${i},this.checked)"> ★ Chef
-      </label>` : '';
-    return `<div class="post-agent-row" id="post-row-${poste}-${i}">
-      <div class="post-agent-avatar" style="background:${cfg.color}22;color:${cfg.color}">${entry.chefSalle?'★':inits}</div>
-      <select class="post-select" onchange="updatePostAgent('${poste}',${i},'nom',this.value)">${agentOpts}</select>
-      <select class="post-repas-select" onchange="updatePostAgent('${poste}',${i},'repas',this.value)" style="color:${cfg.color};border-color:${cfg.color}44;background:rgba(0,0,0,0.45)">${repasOpts}</select>
-      ${chefSalleHtml}
-      <button class="post-remove-btn" onclick="removePostAgent('${poste}',${i})">✕</button>
-    </div>`;
-  }).join('') || '<div style="font-size:12px;color:var(--text-2);text-align:center;padding:12px 0">Aucun agent — cliquez Ajouter</div>';
-
-  // Appliquer les valeurs sélectionnées après insertion DOM
-  const selects = list.querySelectorAll('select');
-  postesData[poste].forEach((entry, i) => {
-    if (selects[i*2])   selects[i*2].value   = entry.nom   || '';
-    if (selects[i*2+1]) selects[i*2+1].value = entry.repas || '';
-  });
-}
-
-function toggleChefSalle(idx, checked) {
-  if (!editMode) { alertLock(); return; }
-  postesData.csu.forEach((e, i) => { e.chefSalle = (i === idx) ? checked : false; });
-  renderPosteTab('csu');
-  _debounceSave();
-}
-
-function renderAllPosteTabs() {
-  renderPosteTab('accueil');
-  renderPosteTab('csu');
-  renderPosteTab('chefposte');
-  renderDashboardPostes();
-}
-
-function addPostAgent(poste) {
-  if (!editMode) { alertLock(); return; }
-  postesData[poste].push({ nom: '', repas: '', chefSalle: false });
-  renderPosteTab(poste);
-  _debounceSave();
-}
-
-function removePostAgent(poste, idx) {
-  if (!editMode) { alertLock(); return; }
-  postesData[poste].splice(idx, 1);
-  renderPosteTab(poste);
-  _debounceSave();
-}
-
-function updatePostAgent(poste, idx, field, value) {
-  if (!editMode) { alertLock(); return; }
-  if (!postesData[poste][idx]) return;
-  postesData[poste][idx][field] = value;
-  // Mise à jour avatar inline sans re-render
-  if (field === 'nom') {
-    const list = document.getElementById(poste + '-agents-list');
-    if (list) {
-      const avatars = list.querySelectorAll('.post-agent-avatar');
-      if (avatars[idx]) avatars[idx].textContent = value ? initials(value) : '?';
-    }
-  }
-  _debounceSave();
-}
-
-// Debounce save — attend 800ms après la dernière modif avant de sauvegarder
-let _debounceTimer = null;
-function _debounceSave() {
-  clearTimeout(_debounceTimer);
-  _debounceTimer = setTimeout(() => {
-    saveData();
-    renderVacationJour();
-    renderPrepPostes();
-  }, 800);
-}
-
-function renderDashboardPostes() {
-  renderVacationJour();
-}
-
-// ════════════════════════════════════════════
-//  PLANNING PRÉVISIONNEL — VACATIONS À VENIR
-//  Chaque jour = vacation complète :
-//  feuilles de route + accueil + CSU + chef de poste + feuille CSU
-// ════════════════════════════════════════════
-
-// Structure d'une vacation prévisionnelle :
-// {
-//   dateStr: "30/05/2026",
-//   shift: "06H45 — 17H15",
-//   routes: [ ...même format que routesData ],
-//   postes: { accueil:[], csu:[], chefposte:[] },
-//   csuSheet: { verbali:[], sections:[], notes:'' },
-//   notes: ''
-// }
-
-let prevVacations = JSON.parse(localStorage.getItem('pm_prevVacations') || '[]');
-let prevSelectedDate = null;
-let prevActiveSection = 'routes'; // 'routes' | 'accueil' | 'csu' | 'chefposte' | 'csu-sheet'
-
-function savePrevData() {
-  try { localStorage.setItem('pm_prevVacations', JSON.stringify(prevVacations)); } catch(e){}
-  // Synchronise aussi Firebase
-  if (window._firebaseSaveDebounced) window._firebaseSaveDebounced();
-}
-
-function getPrevVac(dateStr) {
-  if (!dateStr || !prevVacations) return null;
-  const norm = normDate(dateStr);
-  return prevVacations.find(v => {
-    const d = v.dateStr || v.date || '';
-    return normDate(d) === norm;
-  });
-}
-
-// ── Calendrier bande ──────────────────────────────────────
-function prevGetDays(n) {
-  const jours = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
-  const mois  = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
-  const days  = [];
-  let d = new Date(); d.setHours(0,0,0,0);
-  // inclure aujourd'hui + n jours suivants
-  for (let i = 0; i <= n; i++) {
-    const clone = new Date(d);
-    days.push({
-      ts: clone.getTime(),
-      jourNom: jours[clone.getDay()],
-      num: clone.getDate(),
-      mois: mois[clone.getMonth()],
-      dateStr: normDate(clone)
-    });
-    d.setDate(d.getDate() + 1);
-  }
-  return days;
-}
-
-function planningGoToday() {
-  const today = normDate(new Date());
-  prevSelectDay(today);
-}
-
-function renderPrevCalendar() {
-  const strip = document.getElementById('prev-calendar-strip');
-  if (!strip) return;
-
-  // Afficher -15 jours à +30 jours autour d'aujourd'hui
-  const today = new Date();
-  const days = [];
-  for (let i = -15; i <= 45; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() + i);
-    const dateStr = normDate(d);
-    const jours = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
-    const mois  = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
-    days.push({
-      dateStr,
-      num:     d.getDate(),
-      jourNom: jours[d.getDay()],
-      mois:    mois[d.getMonth()],
-      isToday: i === 0,
-      isFuture: i > 0,
-    });
-  }
-
-  strip.innerHTML = days.map(day => {
-    const vac = getPrevVac(day.dateStr);
-    // Point vert = vacation enregistrée (avec ou sans agents)
-    const hasData = !!vac;
-    const hasAgents = !!(vac && vac.routes && vac.routes.some(r => r.membres && r.membres.length > 0));
-    const isActive = prevSelectedDate === day.dateStr;
-    const dotColor = hasAgents ? '#34d399' : hasData ? '#fbbf24' : 'transparent';
-    const dotGlow  = hasAgents ? 'box-shadow:0 0 5px #34d399' : hasData ? 'box-shadow:0 0 4px #fbbf24' : '';
-    return `<button onclick="prevSelectDay('${day.dateStr}')"
-      style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:3px;
-        padding:8px 12px;border-radius:10px;cursor:pointer;transition:all .15s;
-        font-family:'Inter',sans-serif;min-width:56px;
-        background:${isActive ? 'rgba(192,132,252,.22)' : 'var(--surface)'};
-        border:1px solid ${isActive ? 'rgba(192,132,252,.55)' : day.isToday ? 'rgba(192,132,252,.35)' : 'var(--border)'};
-        opacity:${day.isFuture && !hasData ? '0.7' : '1'};
-      ">
-      <span style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:${isActive?'#e9d5ff':day.isToday?'#c084fc':'var(--text-3)'};font-weight:600">${day.jourNom}</span>
-      <span style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:${isActive?'#c084fc':day.isToday?'#a855f7':'var(--text-primary)'}">${day.num}</span>
-      <span style="font-size:9px;color:${isActive?'#e9d5ff':'var(--text-3)'}">${day.mois}</span>
-      <span style="width:6px;height:6px;border-radius:50%;margin-top:2px;background:${dotColor};${dotGlow}"></span>
-    </button>`;
-  }).join('');
-
-  // Scroller jusqu'à aujourd'hui
-  setTimeout(() => {
-    const todayBtn = strip.children[15]; // index 15 = aujourd'hui
-    if (todayBtn) todayBtn.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' });
-  }, 50);
-}
-
-function prevSelectDay(dateStr) {
-  prevSelectedDate = dateStr;
-  prevActiveSection = 'routes';
-  renderPrevCalendar();
-  renderPrevDayContainer();
-}
-
-// ── Vacation vide ─────────────────────────────────────────
-function prevNewVacation() {
-  return {
-    dateStr: prevSelectedDate,
-    shift: document.querySelector('.shift-badge')?.textContent.trim() || '06H45 — 17H15',
-    routes: JSON.parse(JSON.stringify(routesData)).map(r => ({
-      ...r, membres: [], chef: '—', repas: '—', role: '', fourriere: false,
-      zones: [], consignes: '', missionsSpec: []
-    })),
-    postes: { accueil: [], csu: [], chefposte: [] },
-    csuSheet: {
-      verbali: [
-        { label:'Infractions voie publique', time:'', done:false },
-        { label:'Stationnement gênant', time:'', done:false },
-        { label:'2-roues / EDPM sur trottoir', time:'', done:false },
-        { label:'Chiens sans laisse / déjections', time:'', done:false },
-        { label:'Infractions feux tricolores', time:'', done:false },
-      ],
-      sections: [],
-      notes: ''
-    },
-    notes: ''
-  };
-}
-
-function prevAddVacation() {
-  if (!editMode) { alertLock(); return; }
-  const dateStr = prevSelectedDate;
-  if (!dateStr) { alert('Sélectionnez d\'abord un jour dans le calendrier.'); return; }
-  if (getPrevVac(dateStr)) { alert('Une vacation existe déjà pour ce jour.'); return; }
-  prevVacations.push(prevNewVacation());
-  prevVacations.sort((a,b) => {
-    const pa = a.dateStr.split('/').reverse().join('');
-    const pb = b.dateStr.split('/').reverse().join('');
-    return pa.localeCompare(pb);
-  });
-  savePrevData();
-  renderPrevCalendar();
-  renderPrevDayContainer();
-}
-
-function prevCopyToday() {
-  if (!editMode) { alertLock(); return; }
-  const dateStr = prevSelectedDate;
-  if (!dateStr) { alert('Sélectionnez d\'abord un jour dans le calendrier.'); return; }
-  if (getPrevVac(dateStr) && !confirm(`Une vacation existe déjà pour le ${dateStr}. Écraser ?`)) return;
-  const idx = prevVacations.findIndex(v => v.dateStr === dateStr);
-  const vac = {
-    dateStr,
-    shift: document.querySelector('.shift-badge')?.textContent.trim() || '06H45 — 17H15',
-    routes: JSON.parse(JSON.stringify(routesData)),
-    postes: JSON.parse(JSON.stringify(postesData)),
-    csuSheet: JSON.parse(localStorage.getItem('pm_csuData') || JSON.stringify({verbali:[],sections:[],notes:''})),
-    notes: ''
-  };
-  if (idx >= 0) prevVacations[idx] = vac; else prevVacations.push(vac);
-  prevVacations.sort((a,b) => {
-    const pa = a.dateStr.split('/').reverse().join('');
-    const pb = b.dateStr.split('/').reverse().join('');
-    return pa.localeCompare(pb);
-  });
-  savePrevData();
-  renderPrevCalendar();
-  renderPrevDayContainer();
-}
-
-function prevDeleteVacation(dateStr) {
-  if (!editMode) { alertLock(); return; }
-  if (!confirm(`Supprimer la vacation prévisionnelle du ${dateStr} ?`)) return;
-  const idx = prevVacations.findIndex(v => v.dateStr === dateStr);
-  if (idx >= 0) prevVacations.splice(idx, 1);
-  prevSelectedDate = null;
-  savePrevData();
-  renderPrevCalendar();
-  renderPrevDayContainer();
-}
-
-// ── Rendu principal du jour ────────────────────────────────
-function renderPrevDayContainer() {
-  const el = document.getElementById('prev-day-container');
-  if (!el) return;
-
-  if (!prevSelectedDate) {
-    el.innerHTML = `<div style="text-align:center;padding:60px;color:var(--text-2);font-size:13px">
-      <div style="font-size:40px;margin-bottom:12px">📅</div>
-      Cliquez sur un jour pour voir la vacation enregistrée.
-    </div>`;
-    return;
-  }
-
-  const vac = getPrevVac(prevSelectedDate);
-
-  if (!vac) {
-    el.innerHTML = `<div style="text-align:center;padding:48px;color:var(--text-2);font-size:13px">
-      <div style="font-size:36px;margin-bottom:10px">📋</div>
-      <div>Aucune vacation enregistrée pour le <strong style="color:#c084fc">${prevSelectedDate}</strong></div>
-      <div style="margin-top:12px;font-size:12px;color:var(--text-3)">
-        Pour créer ou modifier une vacation, utilisez l'onglet <strong>Création/Modification vacation</strong>
-      </div>
-    </div>`;
-    return;
-  }
-
-  // En-tête
-  const savedBy  = vac.savedBy  || '—';
-  const savedAt  = vac.savedAt  || '';
-  const nbEquip  = vac.routes.filter(r => r.membres && r.membres.length > 0).length;
-  const nbAgents = new Set(vac.routes.flatMap(r => (r.membres||[]).map(m => m.n))).size;
-
-  // Équipages
-  const equipCards = (vac.routes || []).map(r => {
-    if (!r.membres || !r.membres.length) return '';
-    const pr = PAUSES_REPAS.find(p => p.id === r.repas);
-    const membres = r.membres.map(m => {
-      const isChef = m.n === r.chef;
-      return `<div style="display:flex;align-items:center;gap:7px;padding:4px 0;border-bottom:1px solid var(--border)">
-        <div class="agent-avatar ${isChef?'avatar-amber':'avatar-blue'}" style="width:24px;height:24px;font-size:9px">${initials(m.n||'?')}</div>
-        <span style="font-size:12px;font-weight:${isChef?'600':'400'};color:${isChef?'var(--amber)':'var(--text-1)'}">${m.n}${isChef?' ★':''}</span>
-        <span style="font-size:10px;color:var(--text-3);margin-left:auto">mat.${m.m||'—'}</span>
-      </div>`;
-    }).join('');
-    const zones = (r.zones||[]).map(z=>`<span class="badge badge-cyan" style="font-size:10px">${z}</span>`).join('');
-    return `<div class="route-card">
-      <div class="route-header">
-        <span class="route-title">${r.id}</span>
-        <div style="display:flex;gap:4px;flex-wrap:wrap">
-          ${r.role?`<span class="badge badge-amber" style="font-size:10px">${r.role}</span>`:''}
-          ${r.fourriere?`<span class="badge badge-amber" style="font-size:10px">🚗</span>`:''}
-          ${pr?`<span class="badge ${pr.badge}" style="font-size:10px">${pr.id}</span>`:''}
-        </div>
-      </div>
-      <div class="route-body">
-        <div class="route-membres">${membres}</div>
-        ${zones?`<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">${zones}</div>`:''}
-        ${r.consignes?`<div class="route-consignes" style="margin-top:6px;font-size:11px">${r.consignes.replace(/\n/g,'<br>')}</div>`:''}
-      </div>
-    </div>`;
-  }).filter(Boolean).join('');
-
-  // Postes fixes
-  const posteTypes = [
-    { key:'accueil',   label:'🏠 Accueil',      color:'#a78bfa' },
-    { key:'csu',       label:'📡 CSU',           color:'#34d399' },
-    { key:'chefposte', label:'⭐ Chef de Poste', color:'#f87171' },
-  ];
-  const postesHTML = posteTypes.map(p => {
-    const list = (vac.postes?.[p.key]||[]).filter(e=>e.nom);
-    if (!list.length) return '';
-    return `<div class="post-section" style="padding:10px 14px;margin-bottom:0">
-      <div style="font-size:12px;font-weight:700;color:${p.color};margin-bottom:7px">${p.label}</div>
-      ${list.map(e=>{
-        const pr2 = PAUSES_REPAS.find(pp=>pp.id===e.repas);
-        return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0">
-          <div class="post-agent-avatar" style="background:${p.color}22;color:${p.color}">${initials(e.nom||'?')}</div>
-          <span style="font-size:13px">${e.nom}${e.chefSalle?' ★':''}</span>
-          ${pr2?`<span class="badge badge-gray" style="font-size:10px;margin-left:auto">${pr2.id}</span>`:''}
-        </div>`;
-      }).join('')}
-    </div>`;
-  }).filter(Boolean).join('');
-
-  el.innerHTML = `
-    <div style="background:var(--surface);border:1px solid rgba(192,132,252,.3);border-radius:var(--radius);padding:14px 18px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-      <div>
-        <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:#c084fc">📅 ${prevSelectedDate}</div>
-        <div style="font-size:11px;color:var(--text-2);margin-top:2px">${nbEquip} équipage(s) · ${nbAgents} agent(s)${savedBy!=='—'?' · Enregistré par '+savedBy:''}</div>
-      </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap">
-        ${editMode?`<button onclick="planningLoadToPrep('${prevSelectedDate}')" style="background:rgba(192,132,252,.15);border:1px solid rgba(192,132,252,.4);color:#c084fc;padding:6px 14px;border-radius:var(--radius-sm);font-size:12px;cursor:pointer;font-family:'Inter',sans-serif">✏ Modifier dans Création/Modification</button>`:''}
-        <button onclick="planningPrintDay('${prevSelectedDate}')" style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);color:#fbbf24;padding:6px 14px;border-radius:var(--radius-sm);font-size:12px;cursor:pointer;font-family:'Inter',sans-serif">🖨 Imprimer</button>
-      </div>
-    </div>
-
-    <div class="section-title">Équipages</div>
-    <div class="route-grid" style="margin-bottom:16px">${equipCards || '<div style="color:var(--text-2);font-size:13px">Aucun équipage</div>'}</div>
-
-    ${postesHTML ? `<div class="section-title">Postes fixes</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:16px">${postesHTML}</div>` : ''}
-  `;
-}
-
-function prevSetSection(section) {
-  prevActiveSection = section;
-  renderPrevDayContainer();
-}
-
-// Charger une vacation du planning dans l'onglet Création/Modification
-function planningLoadToPrep(dateStr) {
-  if (!editMode) { alertLock(); return; }
-  const vac = getPrevVac(dateStr);
-  if (!vac) return;
-
-  // Convertir dateStr DD/MM/YYYY → YYYY-MM-DD pour le picker
-  const parts = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  const isoDate = parts ? `${parts[3]}-${parts[2]}-${parts[1]}` : '';
-
-  // Charger dans routesData
-  routesData.length = 0;
-  (vac.routes||[]).forEach(r => routesData.push(JSON.parse(JSON.stringify(r))));
-  if (vac.postes) {
-    Object.keys(postesData).forEach(k => { postesData[k] = []; });
-    Object.assign(postesData, JSON.parse(JSON.stringify(vac.postes)));
-  }
-
-  // Aller sur l'onglet Création/Modification et sélectionner la date
-  showTab('preparee');
-  const picker = document.getElementById('prep-date-picker');
-  if (picker && isoDate) {
-    picker.value = isoDate;
-    document.getElementById('prep-date-status').innerHTML =
-      `<span style="color:#6ee7b7">✓ Vacation du ${dateStr} chargée pour modification</span>`;
-  }
-  renderPrepVacation();
-}
-
-// Imprimer la vacation d'un jour du planning
-function planningPrintDay(dateStr) {
-  const vac = getPrevVac(dateStr);
-  if (!vac) return;
-
-  // Sauvegarder routesData temporairement et utiliser ceux de la vacation
-  const tmpRoutes = JSON.parse(JSON.stringify(routesData));
-  const tmpPostes = JSON.parse(JSON.stringify(postesData));
-
-  routesData.length = 0;
-  (vac.routes||[]).forEach(r => routesData.push(r));
-  Object.assign(postesData, vac.postes || {});
-
-  printPrepOverview();
-
-  // Restaurer
-  routesData.length = 0;
-  tmpRoutes.forEach(r => routesData.push(r));
-  Object.assign(postesData, tmpPostes);
-}
-
-function prevUpdateNotes(val) {
-  const vac = getPrevVac(prevSelectedDate);
-  if (vac) { vac.notes = val; savePrevData(); }
-}
-
-// ── Rendu par section ─────────────────────────────────────
-function renderPrevSection() {
-  const el = document.getElementById('prev-section-content');
-  if (!el || !prevSelectedDate) return;
-  const vac = getPrevVac(prevSelectedDate);
-  if (!vac) return;
-
-  if (prevActiveSection === 'routes')    renderPrevRoutes(el, vac);
-  if (prevActiveSection === 'accueil')   renderPrevPoste(el, vac, 'accueil');
-  if (prevActiveSection === 'csu')       renderPrevPoste(el, vac, 'csu');
-  if (prevActiveSection === 'chefposte') renderPrevPoste(el, vac, 'chefposte');
-  if (prevActiveSection === 'csu-sheet') renderPrevCsuSheet(el, vac);
-}
-
-// ── FEUILLES DE ROUTE ─────────────────────────────────────
-function renderPrevRoutes(el, vac) {
-  if (!vac.routes) vac.routes = [];
-
-  const addBtn = `<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-    <button class="add-btn" onclick="prevAddRoute()" style="background:rgba(6,182,212,0.12);border-color:rgba(6,182,212,0.35);color:#67e8f9">+ Nouvel équipage</button>
-    <button class="add-btn" onclick="prevCopyTodayRoutes()" style="background:rgba(6,182,212,0.08);border-color:rgba(6,182,212,0.25);color:#67e8f9">↳ Copier équipages du jour</button>
-  </div>`;
-
-  if (!vac.routes.length) {
-    el.innerHTML = addBtn + `<div style="text-align:center;padding:30px;color:var(--text-muted);font-size:13px">Aucun équipage. Ajoutez-en ou copiez ceux du jour.</div>`;
-    return;
-  }
-
-  const cards = vac.routes.map((r, rIdx) => {
-    const pr = PAUSES_REPAS.find(p => p.id === r.repas);
-
-    // Membres
-    const membresRows = (r.membres||[]).map((m, mIdx) => {
-      const agentOpts = agents.map(a =>
-        `<option value="${a.nom}" ${a.nom===m.n?'selected':''}>${a.nom}${a.prenom?' '+a.prenom:''}</option>`
-      ).join('');
-      const isChef = m.n === r.chef;
-      return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-        <div style="width:28px;height:28px;border-radius:7px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
-          font-family:'Syne',sans-serif;font-size:10px;font-weight:700;
-          background:${isChef?'rgba(245,158,11,0.2)':'rgba(37,99,235,0.2)'};
-          color:${isChef?'#fcd34d':'#93c5fd'};
-          border:1px solid ${isChef?'rgba(245,158,11,0.4)':'rgba(37,99,235,0.3)'}">
-          ${m.n ? (m.n[0]+(m.n.split(' ')[1]||'?')[0]).toUpperCase() : '?'}
-        </div>
-        <select onchange="prevUpdateMembre(${rIdx},${mIdx},'nom',this.value)"
-          style="flex:1;background:rgba(0,0,0,0.4);border:1px solid var(--border);color:var(--text-primary);padding:5px 8px;border-radius:6px;font-size:12px;font-family:'Inter',sans-serif;outline:none">
-          <option value="">— Agent —</option>${agentOpts}
-        </select>
-        <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:#fcd34d;cursor:pointer;white-space:nowrap">
-          <input type="radio" name="prev-chef-${rIdx}" ${isChef?'checked':''} onchange="prevSetChef(${rIdx},'${m.n||''}')"> Chef
-        </label>
-        <button onclick="prevRemoveMembre(${rIdx},${mIdx})" style="background:none;border:none;color:#fca5a5;cursor:pointer;font-size:14px;padding:2px 4px">✕</button>
-      </div>`;
-    }).join('');
-
-    const repasOpts = PAUSES_REPAS.map(pr2 =>
-      `<option value="${pr2.id}" ${pr2.id===r.repas?'selected':''}>${pr2.id} — ${pr2.midi}</option>`
-    ).join('');
-
-    const zonesOpts = ['Jatte','Saussaye','Boud Bineau','Duc d\'Orléans','Gouraud','Peronnet-Chézy',
-      'Borghèse-Hugo','Peretti','Dulud-Laffitte','Les Sablons','Longchamp','Bagatelle',
-      'Centre-Ville','Secteur Bagatelle','Fourrière','Île de la Jatte','Pont de Neuilly']
-      .map(z => `<option value="${z}" ${(r.zones||[]).includes(z)?'selected':''}>${z}</option>`).join('');
-
-    const missSpecRows = (r.missionsSpec||[]).map((ms, msIdx) =>
-      `<div style="display:flex;gap:6px;margin-bottom:5px;align-items:center">
-        <input type="text" value="${ms.replace(/"/g,'&quot;')}" placeholder="Mission spécifique…"
-          style="flex:1;background:rgba(255,255,255,0.04);border:1px solid var(--border);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:'Inter',sans-serif;outline:none"
-          oninput="prevUpdateMissSpec(${rIdx},${msIdx},this.value)">
-        <button onclick="prevRemoveMissSpec(${rIdx},${msIdx})" style="background:none;border:none;color:#fca5a5;cursor:pointer;font-size:14px;padding:2px 4px">✕</button>
-      </div>`
-    ).join('');
-
-    return `<div style="background:var(--card-bg);border:1px solid rgba(6,182,212,0.2);border-radius:12px;overflow:hidden;margin-bottom:12px;backdrop-filter:blur(8px)">
-      <!-- Header équipage -->
-      <div style="padding:12px 16px;background:rgba(6,182,212,0.08);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
-        <input type="text" value="${r.id}" placeholder="ID équipage (ex: TV 385)"
-          style="background:transparent;border:none;border-bottom:1px solid rgba(6,182,212,0.4);color:#67e8f9;font-family:'Syne',sans-serif;font-size:15px;font-weight:700;outline:none;min-width:100px;max-width:160px;padding-bottom:2px"
-          oninput="prevUpdateRoute(${rIdx},'id',this.value)">
-        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-          <select onchange="prevUpdateRoute(${rIdx},'repas',this.value)"
-            style="background:rgba(0,0,0,0.4);border:1px solid rgba(6,182,212,0.3);color:#67e8f9;padding:4px 8px;border-radius:6px;font-size:11px;font-family:'DM Mono',monospace;outline:none">
-            <option value="—">— Pause —</option>${repasOpts}
-          </select>
-          <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:#fcd34d;cursor:pointer">
-            <input type="checkbox" ${r.fourriere?'checked':''} onchange="prevUpdateRoute(${rIdx},'fourriere',this.checked)" style="accent-color:#f59e0b"> 🚗 Fourrière
-          </label>
-          <button onclick="prevDeleteRoute(${rIdx})" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#fca5a5;padding:4px 10px;border-radius:5px;font-size:11px;cursor:pointer;font-family:'Inter',sans-serif">✕</button>
-        </div>
-      </div>
-      <!-- Body -->
-      <div style="padding:14px 16px">
-        <!-- Membres -->
-        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:600;margin-bottom:8px">👥 Agents</div>
-        ${membresRows}
-        <button onclick="prevAddMembre(${rIdx})"
-          style="background:rgba(37,99,235,0.08);border:1px dashed rgba(37,99,235,0.35);color:#93c5fd;padding:5px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-family:'Inter',sans-serif;margin-bottom:12px">
-          + Ajouter un agent
-        </button>
-
-        <!-- Zones -->
-        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:600;margin-bottom:6px">📍 Zones</div>
-        <select multiple onchange="prevUpdateZones(${rIdx},this)"
-          style="width:100%;background:rgba(0,0,0,0.4);border:1px solid var(--border);color:var(--text-primary);padding:6px;border-radius:7px;font-size:12px;font-family:'Inter',sans-serif;outline:none;min-height:80px;margin-bottom:12px">
-          ${zonesOpts}
-        </select>
-
-        <!-- Missions spécifiques -->
-        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:600;margin-bottom:6px">⚡ Missions spécifiques</div>
-        <div id="prev-missspec-${rIdx}">${missSpecRows}</div>
-        <button onclick="prevAddMissSpec(${rIdx})"
-          style="background:rgba(6,182,212,0.08);border:1px dashed rgba(6,182,212,0.3);color:#67e8f9;padding:5px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-family:'Inter',sans-serif;margin-bottom:12px">
-          + Mission spécifique
-        </button>
-
-        <!-- Consignes -->
-        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:600;margin-bottom:6px">📝 Consignes</div>
-        <textarea placeholder="Consignes pour cet équipage…" oninput="prevUpdateRoute(${rIdx},'consignes',this.value)"
-          style="width:100%;background:rgba(255,255,255,0.03);border:1px solid var(--border);color:var(--text-secondary);padding:8px 10px;border-radius:7px;font-size:12px;font-family:'Inter',sans-serif;outline:none;resize:vertical;min-height:56px"
-        >${r.consignes||''}</textarea>
-      </div>
-    </div>`;
-  }).join('');
-
-  el.innerHTML = addBtn + cards;
-}
-
-function prevAddRoute() {
-  const vac = getPrevVac(prevSelectedDate); if(!vac) return;
-  if (!vac.routes) vac.routes = [];
-  const id = prompt('Identifiant équipage (ex: TV 385, VTT, ILOTS…) :');
-  if (!id) return;
-  vac.routes.push({ id, date: prevSelectedDate, chef:'—', membres:[], repas:'—', role:'', fourriere:false, zones:[], consignes:'', missionsSpec:[] });
-  savePrevData(); renderPrevSection();
-}
-
-function prevCopyTodayRoutes() {
-  const vac = getPrevVac(prevSelectedDate); if(!vac) return;
-  if (!confirm('Remplacer les équipages par ceux du jour actuel ?')) return;
-  vac.routes = JSON.parse(JSON.stringify(routesData));
-  savePrevData(); renderPrevSection();
-}
-
-function prevDeleteRoute(rIdx) {
-  const vac = getPrevVac(prevSelectedDate); if(!vac) return;
-  if (!confirm('Supprimer cet équipage ?')) return;
-  vac.routes.splice(rIdx, 1);
-  savePrevData(); renderPrevSection();
-}
-
-function prevUpdateRoute(rIdx, field, val) {
-  const vac = getPrevVac(prevSelectedDate); if(!vac||!vac.routes[rIdx]) return;
-  vac.routes[rIdx][field] = val;
-  savePrevData();
-}
-
-function prevUpdateZones(rIdx, sel) {
-  const vac = getPrevVac(prevSelectedDate); if(!vac||!vac.routes[rIdx]) return;
-  vac.routes[rIdx].zones = Array.from(sel.selectedOptions).map(o => o.value);
-  savePrevData();
-}
-
-function prevAddMembre(rIdx) {
-  const vac = getPrevVac(prevSelectedDate); if(!vac||!vac.routes[rIdx]) return;
-  vac.routes[rIdx].membres.push({ n:'', m:'' });
-  savePrevData(); renderPrevSection();
-}
-
-function prevRemoveMembre(rIdx, mIdx) {
-  const vac = getPrevVac(prevSelectedDate); if(!vac||!vac.routes[rIdx]) return;
-  vac.routes[rIdx].membres.splice(mIdx, 1);
-  savePrevData(); renderPrevSection();
-}
-
-function prevUpdateMembre(rIdx, mIdx, field, val) {
-  const vac = getPrevVac(prevSelectedDate); if(!vac||!vac.routes[rIdx]) return;
-  if (field === 'nom') {
-    const ag = agents.find(a => a.nom === val);
-    vac.routes[rIdx].membres[mIdx] = { n: val, m: ag ? ag.mat : '' };
-    if (!vac.routes[rIdx].chef || vac.routes[rIdx].chef === '—') vac.routes[rIdx].chef = val;
-  }
-  savePrevData(); renderPrevSection();
-}
-
-function prevSetChef(rIdx, nom) {
-  const vac = getPrevVac(prevSelectedDate); if(!vac||!vac.routes[rIdx]) return;
-  vac.routes[rIdx].chef = nom;
-  savePrevData();
-}
-
-function prevAddMissSpec(rIdx) {
-  const vac = getPrevVac(prevSelectedDate); if(!vac||!vac.routes[rIdx]) return;
-  if (!vac.routes[rIdx].missionsSpec) vac.routes[rIdx].missionsSpec = [];
-  vac.routes[rIdx].missionsSpec.push('');
-  savePrevData(); renderPrevSection();
-}
-
-function prevRemoveMissSpec(rIdx, msIdx) {
-  const vac = getPrevVac(prevSelectedDate); if(!vac||!vac.routes[rIdx]) return;
-  vac.routes[rIdx].missionsSpec.splice(msIdx, 1);
-  savePrevData(); renderPrevSection();
-}
-
-function prevUpdateMissSpec(rIdx, msIdx, val) {
-  const vac = getPrevVac(prevSelectedDate); if(!vac||!vac.routes[rIdx]) return;
-  vac.routes[rIdx].missionsSpec[msIdx] = val;
-  savePrevData();
-}
-
-// ── POSTES FIXES (Accueil / CSU / Chef de Poste) ──────────
-function renderPrevPoste(el, vac, poste) {
-  const cfg = {
-    accueil:   { label:'🏠 Accueil',       color:'#a78bfa', bc:'rgba(167,139,250,0.3)' },
-    csu:       { label:'📡 CSU',            color:'#34d399', bc:'rgba(52,211,153,0.3)' },
-    chefposte: { label:'⭐ Chef de Poste',  color:'#f87171', bc:'rgba(248,113,113,0.3)' },
-  }[poste];
-  const isCsu = poste === 'csu';
-  if (!vac.postes) vac.postes = { accueil:[], csu:[], chefposte:[] };
-  if (!vac.postes[poste]) vac.postes[poste] = [];
-
-  const rows = vac.postes[poste].map((entry, i) => {
-    const agentOpts = ['<option value="">— Sélectionner un agent —</option>',
-      ...agents.map(a => `<option value="${a.nom}" ${a.nom===entry.nom?'selected':''}>${a.nom}${a.prenom?' '+a.prenom:''} (mat.${a.mat})</option>`)
-    ].join('');
-    const repasOpts = ['<option value="">— Aucune pause —</option>',
-      ...PAUSES_REPAS.map(pr => `<option value="${pr.id}" ${pr.id===entry.repas?'selected':''}>${pr.id} — ${pr.midi}</option>`)
-    ].join('');
-    const inits = entry.nom ? (entry.nom[0]+(entry.nom.split(/[\s(]/)[1]||'?')[0]).toUpperCase() : '?';
-    const chefSalleHtml = isCsu ? `
-      <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:#34d399;cursor:pointer;white-space:nowrap;padding:4px 8px;border-radius:6px;border:1px solid ${entry.chefSalle?'rgba(52,211,153,0.45)':'transparent'};background:${entry.chefSalle?'rgba(52,211,153,0.1)':'transparent'}">
-        <input type="checkbox" ${entry.chefSalle?'checked':''} style="accent-color:#34d399" onchange="prevToggleChefSalle('${prevSelectedDate}',${i},this.checked)"> ★ Chef de Salle
-      </label>` : '';
-    return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:8px">
-      <div style="width:32px;height:32px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-size:11px;font-weight:700;background:${cfg.color}22;color:${cfg.color};border:1px solid ${cfg.color}55">${entry.chefSalle?'★':inits}</div>
-      <select onchange="prevUpdatePoste('${prevSelectedDate}','${poste}',${i},'nom',this.value)"
-        style="flex:1;min-width:160px;background:rgba(0,0,0,0.4);border:1px solid var(--border);color:var(--text-primary);padding:7px 10px;border-radius:8px;font-size:13px;font-family:'Inter',sans-serif;outline:none">${agentOpts}</select>
-      <select onchange="prevUpdatePoste('${prevSelectedDate}','${poste}',${i},'repas',this.value)"
-        style="background:rgba(0,0,0,0.4);border:1px solid ${cfg.bc};color:${cfg.color};padding:6px 10px;border-radius:8px;font-size:12px;font-family:'DM Mono',monospace;outline:none;min-width:185px">${repasOpts}</select>
-      ${chefSalleHtml}
-      <button onclick="prevRemovePoste('${prevSelectedDate}','${poste}',${i})" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#fca5a5;padding:5px 10px;border-radius:6px;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif">✕</button>
-    </div>`;
-  }).join('') || `<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:14px 0">Aucun agent affecté</div>`;
-
-  const copyBtn = `<button onclick="prevCopyPosteFromToday('${prevSelectedDate}','${poste}')" style="background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--text-secondary);padding:6px 14px;border-radius:7px;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif">↳ Copier depuis aujourd'hui</button>`;
-
-  el.innerHTML = `
-    <div class="post-section" style="border-color:${cfg.bc}">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
-        <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:${cfg.color}">${cfg.label}</div>
-        ${copyBtn}
-      </div>
-      ${rows}
-      <button onclick="prevAddPoste('${prevSelectedDate}','${poste}')"
-        style="background:rgba(255,255,255,0.04);border:1px dashed var(--border-bright);color:var(--text-secondary);padding:9px 16px;border-radius:8px;font-size:12px;cursor:pointer;width:100%;text-align:center;font-family:'Inter',sans-serif;margin-top:4px;transition:all .15s">
-        + Ajouter un agent
-      </button>
-    </div>`;
-}
-
-function prevAddPoste(dateStr, poste) {
-  const vac = getPrevVac(dateStr); if(!vac) return;
-  if (!vac.postes[poste]) vac.postes[poste] = [];
-  vac.postes[poste].push({ nom:'', repas:'', chefSalle:false });
-  savePrevData(); renderPrevSection();
-}
-
-function prevRemovePoste(dateStr, poste, idx) {
-  const vac = getPrevVac(dateStr); if(!vac) return;
-  vac.postes[poste].splice(idx, 1);
-  savePrevData(); renderPrevSection();
-}
-
-function prevUpdatePoste(dateStr, poste, idx, field, val) {
-  const vac = getPrevVac(dateStr); if(!vac) return;
-  vac.postes[poste][idx][field] = val;
-  savePrevData(); renderPrevSection();
-}
-
-function prevToggleChefSalle(dateStr, idx, checked) {
-  const vac = getPrevVac(dateStr); if(!vac) return;
-  vac.postes.csu.forEach((e,i) => { e.chefSalle = (i===idx) ? checked : false; });
-  savePrevData(); renderPrevSection();
-}
-
-function prevCopyPosteFromToday(dateStr, poste) {
-  const vac = getPrevVac(dateStr); if(!vac) return;
-  if (!confirm(`Copier les agents du poste ${poste} depuis la vacation actuelle ?`)) return;
-  vac.postes[poste] = JSON.parse(JSON.stringify(postesData[poste]));
-  savePrevData(); renderPrevSection();
-}
-
-// ── FEUILLE CSU PRÉVISIONNELLE ─────────────────────────────
-function renderPrevCsuSheet(el, vac) {
-  if (!vac.csuSheet) vac.csuSheet = { verbali:[], sections:[], notes:'' };
-  const cs = vac.csuSheet;
-
-  // Vidéo verbalisation
-  const totalV = cs.verbali.length, doneV = cs.verbali.filter(v=>v.done).length;
-  const pctV = totalV ? Math.round(doneV/totalV*100) : 0;
-  const verbaliRows = cs.verbali.map((v, i) =>
-    `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:rgba(255,255,255,0.02);border:1px solid rgba(52,211,153,${v.done?'0.1':'0.18'});border-radius:8px;margin-bottom:6px;${v.done?'opacity:.65':''}">
-      <input type="checkbox" ${v.done?'checked':''} style="accent-color:#34d399;width:17px;height:17px;cursor:pointer;flex-shrink:0" onchange="prevToggleVerbali('${prevSelectedDate}',${i},this.checked)">
-      <input type="text" value="${(v.label||'').replace(/"/g,'&quot;')}" placeholder="Type de verbalisation…"
-        style="flex:1;background:transparent;border:none;color:${v.done?'var(--text-muted)':'var(--text-primary)'};font-size:13px;font-family:'Inter',sans-serif;outline:none;${v.done?'text-decoration:line-through':''}"
-        oninput="prevUpdateVerbaliLabel('${prevSelectedDate}',${i},this.value)">
-      <input type="time" value="${v.time||''}"
-        style="background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.2);color:#34d399;padding:4px 8px;border-radius:5px;font-size:11px;font-family:'DM Mono',monospace;outline:none;width:90px"
-        onchange="prevUpdateVerbaliTime('${prevSelectedDate}',${i},this.value)">
-      <button onclick="prevDeleteVerbali('${prevSelectedDate}',${i})" style="background:none;border:none;color:#fca5a5;cursor:pointer;font-size:14px;padding:0 2px;flex-shrink:0">✕</button>
-    </div>`
-  ).join('') || '<div style="font-size:12px;color:var(--text-muted);padding:6px 0">Aucun constat</div>';
-
-  // Sections custom
-  const customSections = (cs.sections||[]).map((sec, sIdx) => {
-    const doneS = (sec.tasks||[]).filter(t=>t.done).length;
-    const totalS = (sec.tasks||[]).length;
-    const pctS = totalS ? Math.round(doneS/totalS*100) : 0;
-    const taskRows = (sec.tasks||[]).map((t, tIdx) =>
-      `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(255,255,255,0.02);border:1px solid rgba(52,211,153,0.12);border-radius:7px;margin-bottom:5px;${t.done?'opacity:.65':''}">
-        <input type="checkbox" ${t.done?'checked':''} style="accent-color:#34d399;width:16px;height:16px;cursor:pointer;flex-shrink:0" onchange="prevToggleSecTask('${prevSelectedDate}',${sIdx},${tIdx},this.checked)">
-        <input type="text" value="${(t.label||'').replace(/"/g,'&quot;')}" placeholder="Mission…"
-          style="flex:1;background:transparent;border:none;color:${t.done?'var(--text-muted)':'var(--text-primary)'};font-size:13px;font-family:'Inter',sans-serif;outline:none;${t.done?'text-decoration:line-through':''}"
-          oninput="prevUpdateSecTask('${prevSelectedDate}',${sIdx},${tIdx},this.value)">
-        <input type="time" value="${t.time||''}"
-          style="background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.18);color:#34d399;padding:4px 8px;border-radius:5px;font-size:11px;font-family:'DM Mono',monospace;outline:none;width:90px"
-          onchange="prevUpdateSecTaskTime('${prevSelectedDate}',${sIdx},${tIdx},this.value)">
-        <button onclick="prevDeleteSecTask('${prevSelectedDate}',${sIdx},${tIdx})" style="background:none;border:none;color:#fca5a5;cursor:pointer;font-size:14px;padding:0 2px;flex-shrink:0">✕</button>
-      </div>`
-    ).join('') || '<div style="font-size:12px;color:var(--text-muted);padding:4px 0">Aucune mission</div>';
-
-    return `<div class="post-section" style="border-color:rgba(52,211,153,0.18);margin-bottom:10px">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-        <input type="text" value="${(sec.title||'').replace(/"/g,'&quot;')}" placeholder="Nom de la section…"
-          style="background:transparent;border:none;border-bottom:1px dashed rgba(52,211,153,0.4);color:#34d399;font-family:'Syne',sans-serif;font-size:15px;font-weight:700;outline:none;padding-bottom:2px;flex:1;min-width:100px"
-          oninput="prevUpdateSecTitle('${prevSelectedDate}',${sIdx},this.value)">
-        <div style="display:flex;align-items:center;gap:6px">
-          <div style="background:rgba(52,211,153,0.1);border-radius:4px;height:6px;width:80px;overflow:hidden"><div style="background:#34d399;height:100%;width:${pctS}%;border-radius:4px;transition:width .3s"></div></div>
-          <span style="font-size:11px;color:#34d399;font-weight:600">${doneS}/${totalS}</span>
-        </div>
-        <button onclick="prevDeleteSection('${prevSelectedDate}',${sIdx})" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#fca5a5;padding:4px 10px;border-radius:5px;font-size:11px;cursor:pointer">✕</button>
-      </div>
-      ${taskRows}
-      <button onclick="prevAddSecTask('${prevSelectedDate}',${sIdx})"
-        style="background:rgba(52,211,153,0.06);border:1px dashed rgba(52,211,153,0.3);color:#34d399;padding:6px 14px;border-radius:6px;font-size:11px;cursor:pointer;font-family:'Inter',sans-serif;margin-top:6px">
-        + Ajouter une mission
-      </button>
-    </div>`;
-  }).join('');
-
-  el.innerHTML = `
-    <!-- Vidéo verbalisation -->
-    <div class="post-section" style="border-color:rgba(52,211,153,0.22);margin-bottom:12px">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
-        <div class="post-title" style="color:#34d399;margin-bottom:0">🎥 Vidéo verbalisation</div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <div style="background:rgba(52,211,153,0.1);border-radius:4px;height:6px;width:100px;overflow:hidden"><div style="background:#34d399;height:100%;width:${pctV}%;border-radius:4px;transition:width .3s"></div></div>
-          <span style="font-size:12px;color:#34d399;font-weight:600">${doneV}/${totalV}</span>
-        </div>
-      </div>
-      ${verbaliRows}
-      <button onclick="prevAddVerbali('${prevSelectedDate}')"
-        style="background:rgba(52,211,153,0.07);border:1px dashed rgba(52,211,153,0.35);color:#34d399;padding:7px 14px;border-radius:7px;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif;margin-top:8px;width:100%;text-align:center">
-        + Ajouter un constat / lieu
-      </button>
-    </div>
-
-    <!-- Sections custom -->
-    ${customSections}
-
-    <!-- Ajouter section -->
-    <div style="margin-bottom:12px">
-      <button onclick="prevAddSection('${prevSelectedDate}')"
-        style="background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.3);color:#34d399;padding:8px 18px;border-radius:8px;font-size:12px;font-weight:500;cursor:pointer;font-family:'Inter',sans-serif">
-        + Ajouter une section de missions
-      </button>
-    </div>
-
-    <!-- Notes CSU -->
-    <div class="post-section" style="border-color:rgba(52,211,153,0.15)">
-      <div class="post-title" style="color:#34d399;margin-bottom:10px">📝 Notes & consignes CSU</div>
-      <textarea placeholder="Notes, consignes particulières pour le CSU…" oninput="prevUpdateCsuNotes('${prevSelectedDate}',this.value)"
-        style="width:100%;background:rgba(255,255,255,0.03);border:1px solid rgba(52,211,153,0.25);color:var(--text-secondary);padding:8px 12px;border-radius:8px;font-size:12px;font-family:'Inter',sans-serif;outline:none;resize:vertical;min-height:80px"
-      >${cs.notes||''}</textarea>
-    </div>
-
-    <!-- Réinitialiser cases -->
-    <div style="margin-top:10px;text-align:right">
-      <button onclick="prevResetCsuChecks('${prevSelectedDate}')"
-        style="background:rgba(255,255,255,0.04);border:1px solid var(--border);color:var(--text-muted);padding:6px 14px;border-radius:7px;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif">
-        ↺ Réinitialiser toutes les cases
-      </button>
-    </div>`;
-}
-
-// Vidéo verbalisation prévisionnel
-function prevAddVerbali(dateStr) {
-  const vac = getPrevVac(dateStr); if(!vac) return;
-  if (!vac.csuSheet) vac.csuSheet = {verbali:[],sections:[],notes:''};
-  vac.csuSheet.verbali.push({ label:'', time:'', done:false });
-  savePrevData(); renderPrevSection();
-}
-function prevDeleteVerbali(dateStr, i) {
-  const vac = getPrevVac(dateStr); if(!vac) return;
-  vac.csuSheet.verbali.splice(i, 1);
-  savePrevData(); renderPrevSection();
-}
-function prevToggleVerbali(dateStr, i, checked) {
-  const vac = getPrevVac(dateStr); if(!vac) return;
-  vac.csuSheet.verbali[i].done = checked;
-  savePrevData(); renderPrevSection();
-}
-function prevUpdateVerbaliLabel(dateStr, i, val) {
-  const vac = getPrevVac(dateStr); if(!vac) return;
-  vac.csuSheet.verbali[i].label = val; savePrevData();
-}
-function prevUpdateVerbaliTime(dateStr, i, val) {
-  const vac = getPrevVac(dateStr); if(!vac) return;
-  vac.csuSheet.verbali[i].time = val; savePrevData();
-}
-
-// Sections custom
-function prevAddSection(dateStr) {
-  const vac = getPrevVac(dateStr); if(!vac) return;
-  if (!vac.csuSheet.sections) vac.csuSheet.sections = [];
-  const title = prompt('Nom de la section (ex : Surveillance caméras, Contacts radio…) :');
-  if (!title) return;
-  vac.csuSheet.sections.push({ title, tasks:[] });
-  savePrevData(); renderPrevSection();
-}
-function prevDeleteSection(dateStr, sIdx) {
-  const vac = getPrevVac(dateStr); if(!vac) return;
-  if (!confirm('Supprimer cette section ?')) return;
-  vac.csuSheet.sections.splice(sIdx, 1);
-  savePrevData(); renderPrevSection();
-}
-function prevUpdateSecTitle(dateStr, sIdx, val) {
-  const vac = getPrevVac(dateStr); if(!vac) return;
-  vac.csuSheet.sections[sIdx].title = val; savePrevData();
-}
-function prevAddSecTask(dateStr, sIdx) {
-  const vac = getPrevVac(dateStr); if(!vac) return;
-  if (!vac.csuSheet.sections[sIdx].tasks) vac.csuSheet.sections[sIdx].tasks = [];
-  vac.csuSheet.sections[sIdx].tasks.push({ label:'', time:'', done:false });
-  savePrevData(); renderPrevSection();
-}
-function prevDeleteSecTask(dateStr, sIdx, tIdx) {
-  const vac = getPrevVac(dateStr); if(!vac) return;
-  vac.csuSheet.sections[sIdx].tasks.splice(tIdx, 1);
-  savePrevData(); renderPrevSection();
-}
-function prevToggleSecTask(dateStr, sIdx, tIdx, checked) {
-  const vac = getPrevVac(dateStr); if(!vac) return;
-  vac.csuSheet.sections[sIdx].tasks[tIdx].done = checked;
-  savePrevData(); renderPrevSection();
-}
-function prevUpdateSecTask(dateStr, sIdx, tIdx, val) {
-  const vac = getPrevVac(dateStr); if(!vac) return;
-  vac.csuSheet.sections[sIdx].tasks[tIdx].label = val; savePrevData();
-}
-function prevUpdateSecTaskTime(dateStr, sIdx, tIdx, val) {
-  const vac = getPrevVac(dateStr); if(!vac) return;
-  vac.csuSheet.sections[sIdx].tasks[tIdx].time = val; savePrevData();
-}
-function prevUpdateCsuNotes(dateStr, val) {
-  const vac = getPrevVac(dateStr); if(!vac) return;
-  vac.csuSheet.notes = val; savePrevData();
-}
-function prevResetCsuChecks(dateStr) {
-  const vac = getPrevVac(dateStr); if(!vac) return;
-  if (!confirm('Réinitialiser toutes les cases à cocher de la feuille CSU ?')) return;
-  (vac.csuSheet.verbali||[]).forEach(v => v.done = false);
-  (vac.csuSheet.sections||[]).forEach(s => (s.tasks||[]).forEach(t => t.done = false));
-  savePrevData(); renderPrevSection();
-}
-
-// Alias pour le bouton "Ajouter une vacation"
-// Alias de compatibilité
-function savePlanningData() { savePrevData(); }
-function renderPlanningWeekStrip() { renderPrevCalendar(); }
-function renderPlanningDayContent() { renderPrevDayContainer(); }
-
-
-// ════════════════════════════════════════════
-//  FEUILLE DE ROUTE CSU
-// ════════════════════════════════════════════
-
-let csuData = {
-  verbali: [
-    { label:'Infractions voie publique', time:'', done:false },
-    { label:'Stationnement gênant', time:'', done:false },
-    { label:'2-roues / EDPM sur trottoir', time:'', done:false },
-    { label:'Chiens sans laisse / déjections', time:'', done:false },
-    { label:'Infractions feux tricolores', time:'', done:false },
-  ],
-  sections: [],
-  notes: ''
-};
-
-function saveCsuData() {
-  csuData.notes = document.getElementById('csu-notes-textarea')?.value || csuData.notes;
-  // Passe par saveData() pour synchroniser localStorage ET Firebase
-  saveData();
-}
-
-function renderCsuRoadmap() {
-  // Agents
-  const agentsEl = document.getElementById('csu-roadmap-agents');
-  if (agentsEl) {
-    const csuAgents = postesData.csu.filter(e => e.nom);
-    agentsEl.innerHTML = csuAgents.length
-      ? csuAgents.map(e => {
-          const cs = e.chefSalle ? ' ★ Chef de Salle' : '';
-          return `<span style="background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.3);color:#34d399;padding:5px 12px;border-radius:7px;font-size:13px;font-weight:500">${e.nom}${cs}</span>`;
-        }).join('')
-      : '<span style="font-size:12px;color:var(--text-muted)">Aucun agent affecté au CSU — assignez-les dans l\'onglet CSU</span>';
-  }
-
-  // Vidéo verbalisation
-  renderCsuVerbali();
-
-  // Custom sections
-  renderCsuSections();
-
-  // Notes
-  const notesEl = document.getElementById('csu-notes-textarea');
-  if (notesEl) notesEl.value = csuData.notes || '';
-}
-
-function updateCsuVerbaliProgress() {
-  const total = csuData.verbali.length;
-  const done = csuData.verbali.filter(v=>v.done).length;
-  const el = document.getElementById('csu-verbali-progress');
-  if (!el) return;
-  const pct = total ? Math.round(done/total*100) : 0;
-  el.innerHTML = `<div style="display:flex;align-items:center;gap:8px">
-    <div class="csu-progress-bar-wrap" style="width:100px"><div class="csu-progress-bar" style="width:${pct}%"></div></div>
-    <span style="color:#34d399;font-weight:600">${done}/${total}</span>
-  </div>`;
-}
-
-function renderCsuVerbali() {
-  const list = document.getElementById('csu-verbali-list');
-  if (!list) return;
-  list.innerHTML = csuData.verbali.map((v, i) => {
-    return `<div class="csu-task-row${v.done?' done':''}" style="border-color:rgba(52,211,153,0.2)">
-      <input type="checkbox" class="csu-checkbox" ${v.done?'checked':''} onchange="toggleCsuVerbali(${i},this.checked)">
-      <input class="csu-task-label-input" type="text" value="${(v.label||'').replace(/"/g,'&quot;')}" placeholder="Type de verbalisation…" oninput="updateCsuVerbaliLabel(${i},this.value)">
-      <input type="time" value="${v.time||''}" style="background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.2);color:#34d399;padding:4px 8px;border-radius:5px;font-size:11px;font-family:'DM Mono',monospace;outline:none;width:90px" onchange="updateCsuVerbaliTime(${i},this.value)">
-      <button onclick="deleteCsuVerbali(${i})" style="background:none;border:none;color:#fca5a5;cursor:pointer;font-size:14px;padding:0 4px;flex-shrink:0">✕</button>
-    </div>`;
-  }).join('') || '<div style="font-size:12px;color:var(--text-muted);padding:6px 0">Aucun constat enregistré</div>';
-  updateCsuVerbaliProgress();
-}
-
-function toggleCsuVerbali(idx, checked) {
-  csuData.verbali[idx].done = checked;
-  saveCsuData();
-  renderCsuVerbali();
-}
-function updateCsuVerbaliLabel(idx, val) { csuData.verbali[idx].label = val; saveCsuData(); updateCsuVerbaliProgress(); }
-function updateCsuVerbaliTime(idx, val) { csuData.verbali[idx].time = val; saveCsuData(); }
-function deleteCsuVerbali(idx) {
-  csuData.verbali.splice(idx, 1);
-  saveCsuData();
-  renderCsuVerbali();
-}
-function addCsuVerbaliTask() {
-  csuData.verbali.push({ label:'', time:'', done:false });
-  saveCsuData();
-  renderCsuVerbali();
-}
-
-function renderCsuSections() {
-  const container = document.getElementById('csu-custom-sections');
-  if (!container) return;
-  if (!csuData.sections) csuData.sections = [];
-  container.innerHTML = csuData.sections.map((sec, sIdx) => {
-    const taskRows = (sec.tasks||[]).map((t, tIdx) => {
-      return `<div class="csu-task-row${t.done?' done':''}" style="border-color:rgba(52,211,153,0.15)">
-        <input type="checkbox" class="csu-checkbox" ${t.done?'checked':''} onchange="toggleCsuSectionTask(${sIdx},${tIdx},this.checked)">
-        <input class="csu-task-label-input" type="text" value="${(t.label||'').replace(/"/g,'&quot;')}" placeholder="Mission…" oninput="updateCsuSectionTask(${sIdx},${tIdx},this.value)">
-        <input type="time" value="${t.time||''}" style="background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.2);color:#34d399;padding:4px 8px;border-radius:5px;font-size:11px;font-family:'DM Mono',monospace;outline:none;width:90px" onchange="updateCsuSectionTaskTime(${sIdx},${tIdx},this.value)">
-        <button onclick="deleteCsuSectionTask(${sIdx},${tIdx})" style="background:none;border:none;color:#fca5a5;cursor:pointer;font-size:14px;padding:0 4px;flex-shrink:0">✕</button>
-      </div>`;
-    }).join('') || '<div style="font-size:12px;color:var(--text-muted);padding:4px 0">Aucune mission</div>';
-    const done = (sec.tasks||[]).filter(t=>t.done).length;
-    const total = (sec.tasks||[]).length;
-    const pct = total ? Math.round(done/total*100) : 0;
-    return `<div class="post-section" style="border-color:rgba(52,211,153,0.18);margin-bottom:12px">
-      <div class="csu-section-header">
-        <div style="display:flex;align-items:center;gap:10px;flex:1">
-          <input class="csu-section-title-input" type="text" value="${(sec.title||'').replace(/"/g,'&quot;')}" placeholder="Nom de la section…" oninput="updateCsuSectionTitle(${sIdx},this.value)">
-          <div class="csu-progress-bar-wrap" style="width:80px"><div class="csu-progress-bar" style="width:${pct}%"></div></div>
-          <span style="font-size:11px;color:#34d399;font-weight:600">${done}/${total}</span>
-        </div>
-        <button onclick="deleteCsuSection(${sIdx})" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#fca5a5;padding:4px 10px;border-radius:5px;font-size:11px;cursor:pointer">✕ Supprimer section</button>
-      </div>
-      ${taskRows}
-      <button class="post-add-btn" style="border-color:rgba(52,211,153,0.35);color:#34d399;margin-top:8px" onclick="addCsuSectionTask(${sIdx})">+ Ajouter une mission</button>
-    </div>`;
-  }).join('');
-}
-
-function openAddCsuMission() {
-  const title = prompt('Nom de la nouvelle section (ex: Surveillance caméras, Contacts radio…) :');
-  if (!title) return;
-  if (!csuData.sections) csuData.sections = [];
-  csuData.sections.push({ title, tasks:[] });
-  saveCsuData();
-  renderCsuSections();
-}
-
-function updateCsuSectionTitle(sIdx, val) { csuData.sections[sIdx].title = val; saveCsuData(); }
-function deleteCsuSection(sIdx) {
-  if (!confirm('Supprimer cette section ?')) return;
-  csuData.sections.splice(sIdx, 1);
-  saveCsuData();
-  renderCsuSections();
-}
-
-function addCsuSectionTask(sIdx) {
-  if (!csuData.sections[sIdx].tasks) csuData.sections[sIdx].tasks = [];
-  csuData.sections[sIdx].tasks.push({ label:'', time:'', done:false });
-  saveCsuData();
-  renderCsuSections();
-}
-
-function toggleCsuSectionTask(sIdx, tIdx, checked) {
-  csuData.sections[sIdx].tasks[tIdx].done = checked;
-  saveCsuData();
-  renderCsuSections();
-}
-function updateCsuSectionTask(sIdx, tIdx, val) { csuData.sections[sIdx].tasks[tIdx].label = val; saveCsuData(); }
-function updateCsuSectionTaskTime(sIdx, tIdx, val) { csuData.sections[sIdx].tasks[tIdx].time = val; saveCsuData(); }
-function deleteCsuSectionTask(sIdx, tIdx) {
-  csuData.sections[sIdx].tasks.splice(tIdx, 1);
-  saveCsuData();
-  renderCsuSections();
-}
-
-function resetCsuChecks() {
-  if (!confirm('Réinitialiser toutes les cases à cocher du CSU ?')) return;
-  csuData.verbali.forEach(v => v.done = false);
-  (csuData.sections||[]).forEach(s => (s.tasks||[]).forEach(t => t.done = false));
-  saveCsuData();
-  renderCsuRoadmap();
-}
-
-// ════════════════════════════════════════════
-//  HISTORIQUE DES MODIFICATIONS
-// ════════════════════════════════════════════
-
-// ════════════════════════════════════════════
-//  IMPRESSION — VUE D'ENSEMBLE
-// ════════════════════════════════════════════
-
-// ════════════════════════════════════════════
-//  STATISTIQUES AGENTS
-// ════════════════════════════════════════════
-
-function renderStats() {
-  const periodDays = parseInt(document.getElementById('stats-period')?.value) || 0;
-  const agentSearch = (document.getElementById('stats-agent-search')?.value || '').toLowerCase().trim();
-
-  // ── Source unique : prevVacations (vacations enregistrées via 💾 Enregistrer)
-  // Dédoublonnage par date — garder la version la plus récente pour chaque date
-  const seenDates = new Set();
-  const allVacations = [];
-
-  (prevVacations || []).forEach(v => {
-    const dateKey = v.dateStr || v.date || '';
-    if (seenDates.has(dateKey)) return; // ignorer les doublons
-    seenDates.add(dateKey);
-    allVacations.push({
-      date:   dateKey,
-      routes: v.routes || [],
-      postes: v.postes  || { accueil:[], csu:[], chefposte:[] },
-    });
-  });
-
-  // ── Filtre période ─────────────────────────────────────────
-  const now = new Date();
-  const filtered = periodDays > 0 ? allVacations.filter(v => {
-    if (!v.date) return false;
-    const parts = v.date.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
-    if (!parts) {
-      // Format YYYY-MM-DD
-      const d = new Date(v.date + 'T12:00:00');
-      return !isNaN(d) && (now - d) / 86400000 <= periodDays;
-    }
-    const d = new Date(+parts[3], +parts[2]-1, +parts[1]);
-    return (now - d) / 86400000 <= periodDays;
-  }) : allVacations;
-
-  // ── Agréger par agent ──────────────────────────────────────
-  const statsMap = {}; // { nomAgent: { tv, vtt, scooter, ilots, accueil, csu, chefposte, chef, vacations, binomes:{nom:count} } }
-
-  const getOrCreate = nom => {
-    if (!statsMap[nom]) statsMap[nom] = { tv:0, vtt:0, scooter:0, ilots:0, accueil:0, csu:0, chefposte:0, chef:0, vacations:0, binomes:{} };
-    return statsMap[nom];
-  };
-
-  const TYPE_TV      = id => /^TV/i.test(id);
-  const TYPE_VTT     = id => /^VTT/i.test(id);
-  const TYPE_SCOOTER = id => /^SCOOTER/i.test(id);
-  const TYPE_ILOTS   = id => /^ILOT/i.test(id);
-
-  filtered.forEach(v => {
-    // Routes
-    (v.routes || []).forEach(r => {
-      const membres = (r.membres || []).map(m => m.n).filter(Boolean);
-      membres.forEach(nom => {
-        const s = getOrCreate(nom);
-        s.vacations++;
-        if (TYPE_TV(r.id))      s.tv++;
-        else if (TYPE_VTT(r.id))     s.vtt++;
-        else if (TYPE_SCOOTER(r.id)) s.scooter++;
-        else if (TYPE_ILOTS(r.id))   s.ilots++;
-        else                          s.tv++; // défaut TV
-        if (r.chef === nom) s.chef++;
-        // Binômes
-        membres.forEach(autre => {
-          if (autre !== nom) {
-            s.binomes[autre] = (s.binomes[autre] || 0) + 1;
-          }
-        });
-      });
-    });
-
-    // Postes fixes
-    const postes = v.postes || {};
-    (postes.accueil || []).forEach(e => { if(e.nom) getOrCreate(e.nom).accueil++; });
-    (postes.csu     || []).forEach(e => { if(e.nom) getOrCreate(e.nom).csu++;     });
-    (postes.chefposte||[]).forEach(e=>{ if(e.nom) getOrCreate(e.nom).chefposte++;});
-  });
-
-  // ── Trier agents ───────────────────────────────────────────
-  let agentList = Object.entries(statsMap)
-    .sort((a,b) => b[1].vacations - a[1].vacations);
-
-  if (agentSearch) {
-    agentList = agentList.filter(([nom]) => nom.toLowerCase().includes(agentSearch));
-  }
-
-  const nbDates  = filtered.length;
-  const nbAgentsDistincts = Object.keys(statsMap).length;
-  const globalEl = document.getElementById('stats-global');
-  if (globalEl) globalEl.innerHTML = [
-    { label:'Vacations analysées',  val: nbDates,           color:'blue'  },
-    { label:'Agents distincts',      val: nbAgentsDistincts, color:'cyan'  },
-    { label:'Vacations enregistrées',val: allVacations.length, color:'amber' },
-    { label:'Agents dans la base',   val: agents.length,     color:'green' },
-  ].map(s => `<div class="stat-card ${s.color}" style="padding:10px 14px">
-    <div class="stat-label">${s.label}</div>
-    <div class="stat-value" style="font-size:22px">${s.val}</div>
-  </div>`).join('');
-
-  // ── Tableau ────────────────────────────────────────────────
-  const bar = (val, max, color) => {
-    if (!max) return `<span style="color:var(--text-3)">—</span>`;
-    const pct = Math.round((val/max)*100);
-    return `<div style="display:flex;align-items:center;gap:6px">
-      <div style="width:48px;height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden;flex-shrink:0">
-        <div style="width:${pct}%;height:100%;background:${color};border-radius:3px"></div>
-      </div>
-      <span style="font-size:12px;font-family:'DM Mono',monospace">${val}</span>
-    </div>`;
-  };
-
-  const maxVac = Math.max(...agentList.map(([,s]) => s.vacations), 1);
-  const maxTV  = Math.max(...agentList.map(([,s]) => s.tv),        1);
-  const maxVTT = Math.max(...agentList.map(([,s]) => s.vtt),       1);
-  const maxSco = Math.max(...agentList.map(([,s]) => s.scooter),   1);
-  const maxIlo = Math.max(...agentList.map(([,s]) => s.ilots),     1);
-  const maxAcc = Math.max(...agentList.map(([,s]) => s.accueil),   1);
-  const maxCsu = Math.max(...agentList.map(([,s]) => s.csu),       1);
-  const maxChP = Math.max(...agentList.map(([,s]) => s.chefposte), 1);
-
-  document.getElementById('stats-tbody').innerHTML = agentList.length
-    ? agentList.map(([nom, s]) => {
-        const ag = agents.find(a => a.nom === nom);
-        const initials2 = nom.split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
-        return `<tr>
-          <td>
-            <div style="display:flex;align-items:center;gap:8px">
-              <div style="width:28px;height:28px;border-radius:6px;background:rgba(37,99,235,.18);color:#93c5fd;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;font-family:'Syne',sans-serif;flex-shrink:0">${initials2}</div>
-              <div>
-                <div style="font-weight:600;font-size:13px">${nom}</div>
-                ${ag ? `<div style="font-size:10px;color:var(--text-3)">Mat. ${ag.mat||'—'} · ${ag.grade||'APM'}</div>` : ''}
-              </div>
-            </div>
-          </td>
-          <td>${bar(s.vacations, maxVac, 'var(--accent)')}</td>
-          <td>${bar(s.tv,        maxTV,  '#60a5fa')}</td>
-          <td>${bar(s.vtt,       maxVTT, '#34d399')}</td>
-          <td>${bar(s.scooter,   maxSco, '#fb923c')}</td>
-          <td>${bar(s.ilots,     maxIlo, '#c084fc')}</td>
-          <td>${bar(s.accueil,   maxAcc, '#a78bfa')}</td>
-          <td>${bar(s.csu,       maxCsu, '#34d399')}</td>
-          <td>${bar(s.chefposte, maxChP, '#f87171')}</td>
-          <td>
-            ${s.chef > 0 ? `<span class="badge badge-amber" style="font-size:11px">★ ${s.chef}×</span>` : '<span style="color:var(--text-3);font-size:12px">—</span>'}
-          </td>
-          <td>
-            <button onclick="showAgentBinomes('${nom.replace(/'/g,"\\'")}',${JSON.stringify(s.binomes).replace(/"/g,'&quot;')})"
-              style="font-size:11px;background:var(--surface-2);border:1px solid var(--border);color:var(--text-2);padding:3px 9px;border-radius:5px;cursor:pointer;font-family:'Inter',sans-serif">
-              Voir ${Object.keys(s.binomes).length} binôme${Object.keys(s.binomes).length!==1?'s':''}
-            </button>
-          </td>
-        </tr>`;
-      }).join('')
-    : `<tr><td colspan="11" style="text-align:center;color:var(--text-3);padding:24px">Aucune donnée — enregistrez des vacations dans le planning pour voir les statistiques.</td></tr>`;
-}
-
-function showAgentBinomes(nom, binomesJson) {
-  const binomes = typeof binomesJson === 'string' ? JSON.parse(binomesJson) : binomesJson;
-  const sorted = Object.entries(binomes).sort((a,b)=>b[1]-a[1]);
-  const max = sorted[0]?.[1] || 1;
-
-  const detail = document.getElementById('stats-agent-detail');
-  if (!detail) return;
-
-  if (detail.dataset.agent === nom && detail.style.display !== 'none') {
-    detail.style.display = 'none';
-    detail.dataset.agent = '';
-    return;
-  }
-
-  detail.dataset.agent = nom;
-  detail.style.display = 'block';
-  detail.innerHTML = `
-    <div style="background:var(--surface);border:1px solid var(--border-hi);border-radius:var(--radius);padding:16px 18px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <div style="font-weight:600;font-size:14px">Binômes de <span style="color:var(--cyan)">${nom}</span></div>
-        <button onclick="document.getElementById('stats-agent-detail').style.display='none'" style="background:none;border:none;color:var(--text-2);cursor:pointer;font-size:16px">✕</button>
-      </div>
-      ${sorted.length === 0 ? '<div style="color:var(--text-3);font-size:13px">Aucun binôme enregistré</div>' :
-        `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
-          ${sorted.map(([partenaire, count]) => {
-            const pct = Math.round((count/max)*100);
-            const ag2 = agents.find(a => a.nom === partenaire);
-            const initials2 = partenaire.split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
-            return `<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
-              <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
-                <div style="width:26px;height:26px;border-radius:6px;background:rgba(34,211,238,.12);color:var(--cyan);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;font-family:'Syne',sans-serif;flex-shrink:0">${initials2}</div>
-                <div>
-                  <div style="font-size:12px;font-weight:600">${partenaire}</div>
-                  ${ag2 ? `<div style="font-size:10px;color:var(--text-3)">Mat. ${ag2.mat||'—'}</div>` : ''}
-                </div>
-                <span style="margin-left:auto;font-family:'DM Mono',monospace;font-size:13px;font-weight:700;color:var(--cyan)">${count}×</span>
-              </div>
-              <div style="height:4px;background:var(--surface);border-radius:2px;overflow:hidden">
-                <div style="width:${pct}%;height:100%;background:var(--cyan);border-radius:2px"></div>
-              </div>
-            </div>`;
-          }).join('')}
-        </div>`
-      }
-    </div>`;
-}
-
-function buildPrintPreview() {
-  const content = document.getElementById('print-preview-content');
-  if (!content) return;
-
-  const showMissions = document.getElementById('print-show-missions')?.checked ?? true;
-  const showPostes   = document.getElementById('print-show-postes')?.checked ?? true;
-  const showPauses   = document.getElementById('print-show-pauses')?.checked ?? true;
-
-  // Chercher la vacation enregistrée pour aujourd'hui
-  const todayShort = normDate(new Date());
-  const todayISO   = new Date().toISOString().split('T')[0];
-  const vacAujourdhui = (prevVacations || []).find(v => {
-    const d = v.dateStr || v.date || '';
-    if (d === todayShort || d === todayISO) return true;
-    const p = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    return p ? `${p[3]}-${p[2].padStart(2,'0')}-${p[1].padStart(2,'0')}` === todayISO : false;
-  });
-
-  const vjRoutes = vacAujourdhui?.routes  || routesData;
-  const vjPostes = vacAujourdhui?.postes  || postesData;
-  const vjMissText = vacAujourdhui?.missions || regularMissions;
-
-  const today = new Date().toLocaleDateString('fr-FR', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
-  const shift = document.querySelector('.shift-badge')?.textContent?.trim() || '';
-
-  if (!vacAujourdhui) {
-    content.innerHTML = `<div style="text-align:center;padding:40px;color:#94a3b8;font-size:13px">
-      ⚠ Aucune vacation enregistrée pour aujourd'hui.<br>
-      <span style="font-size:12px">Allez dans <b>Création/Modification vacation</b> → sélectionnez la date d'aujourd'hui → <b>💾 Enregistrer</b></span>
-    </div>`;
-    return;
-  }
-
-  // ── En-tête ──────────────────────────────────────────────
-  let html = `
-  <div id="print-root" style="font-family:'Inter',sans-serif;color:#111;font-size:13px">
-    <!-- Header -->
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:14px;border-bottom:2px solid #1e3a8a">
-      <div>
-        <div style="font-size:22px;font-weight:800;color:#1e3a8a;letter-spacing:0.02em;font-family:sans-serif">PLANNING JOURNALIER</div>
-        <div style="font-size:13px;color:#475569;margin-top:3px;text-transform:uppercase;letter-spacing:0.06em">Police Municipale · Brigade Jour</div>
-      </div>
-      <div style="text-align:right">
-        <div style="font-size:14px;font-weight:700;color:#1e3a8a">${today.charAt(0).toUpperCase() + today.slice(1)}</div>
-        <div style="font-size:12px;color:#475569;margin-top:2px;font-family:monospace">${shift}</div>
-        <div style="font-size:10px;color:#94a3b8;margin-top:4px">Imprimé le ${new Date().toLocaleString('fr-FR')}</div>
-      </div>
-    </div>`;
-
-  // ── Statistiques ─────────────────────────────────────────
-  const _pres = new Set(); vjRoutes.forEach(r => (r.membres||[]).forEach(m => { if(m.n) _pres.add(m.n); }));
-  const nbPresents  = String(_pres.size);
-  const nbEquipages = String(vjRoutes.filter(r => (r.membres||[]).length > 0).length);
-  const nbMissions  = String(missions.filter(m => vjMissText.includes(m.text)).length);
-  const nbAgents    = String(agents.length);
-
-  html += `
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px">
-      ${[
-        { label:'Effectifs présents', val:nbPresents, color:'#2563eb' },
-        { label:'Équipages actifs',   val:nbEquipages, color:'#0891b2' },
-        { label:'Missions actives',   val:nbMissions,  color:'#d97706' },
-        { label:'Agents base',        val:nbAgents,    color:'#059669' },
-      ].map(s => `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;border-left:4px solid ${s.color}">
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#64748b;font-weight:600;margin-bottom:4px">${s.label}</div>
-        <div style="font-size:26px;font-weight:800;color:${s.color};line-height:1">${s.val}</div>
-      </div>`).join('')}
-    </div>`;
-
-  // ── Équipages ─────────────────────────────────────────────
-  html += `<div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#1e3a8a;margin-bottom:10px;display:flex;align-items:center;gap:8px"><span style="display:inline-block;width:3px;height:16px;background:#2563eb;border-radius:2px;flex-shrink:0"></span>Composition des équipages</div>`;
-  html += `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-bottom:20px">`;
-
-  vjRoutes.forEach(r => {
-    const pr = PAUSES_REPAS.find(p => p.id === r.repas);
-    const membres = (r.membres||[]).length
-      ? r.membres.map(m => {
-          const isChef = m.n === r.chef;
-          return `<div style="display:flex;align-items:center;gap:7px;padding:4px 0;border-bottom:1px solid #f1f5f9">
-            <div style="width:24px;height:24px;border-radius:6px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;background:${isChef?'#fef3c7':'#eff6ff'};color:${isChef?'#92400e':'#1e40af'};border:1px solid ${isChef?'#fde68a':'#bfdbfe'}">${initials(m.n||'?')}</div>
-            <div style="flex:1;font-size:11px;font-weight:${isChef?'700':'400'};color:${isChef?'#92400e':'#334155'}">${m.n}${isChef?' ★':''}</div>
-            <div style="font-size:10px;color:#94a3b8;font-family:monospace">mat.${m.m||'—'}</div>
-          </div>`;
-        }).join('')
-      : '<div style="font-size:11px;color:#94a3b8;padding:6px 0">Aucun agent</div>';
-
-    const zones = (r.zones||[]).map(z=>`<span style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:4px;padding:1px 6px;font-size:9px">${z}</span>`).join(' ');
-    const tags = [
-      r.role ? `<span style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:4px;padding:1px 6px;font-size:9px">${r.role}</span>` : '',
-      r.fourriere ? `<span style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:4px;padding:1px 6px;font-size:9px">🚗 Fourrière</span>` : '',
-      pr ? `<span style="background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;border-radius:4px;padding:1px 6px;font-size:9px">${pr.id}</span>` : '',
-    ].filter(Boolean).join(' ');
-
-    html += `<div style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden">
-      <div style="padding:8px 12px;background:#f8fafc;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center">
-        <div style="font-weight:700;font-size:13px;color:#1e3a8a">${r.id}</div>
-        <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${tags}</div>
-      </div>
-      <div style="padding:8px 12px">
-        ${membres}
-        ${zones ? `<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">${zones}</div>` : ''}
-      </div>
-    </div>`;
-  });
-  html += `</div>`;
-
-  // ── Pauses repas ──────────────────────────────────────────
-  if (showPauses) {
-    html += `<div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#1e3a8a;margin-bottom:10px;display:flex;align-items:center;gap:8px"><span style="display:inline-block;width:3px;height:16px;background:#2563eb;border-radius:2px;flex-shrink:0"></span>Pauses repas</div>`;
-    html += `<table style="width:100%;border-collapse:collapse;margin-bottom:20px;font-size:12px">
-      <thead><tr style="background:#f8fafc">
-        <th style="padding:7px 12px;text-align:left;border:1px solid #e2e8f0;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#64748b">N° Pause</th>
-        <th style="padding:7px 12px;text-align:left;border:1px solid #e2e8f0;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#64748b">Créneau midi</th>
-        <th style="padding:7px 12px;text-align:left;border:1px solid #e2e8f0;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#64748b">Équipages</th>
-      </tr></thead><tbody>`;
-    PAUSES_REPAS.forEach(pr => {
-      const assigned = vjRoutes.filter(r => r.repas === pr.id).map(r=>r.id).join(', ') || '—';
-      html += `<tr>
-        <td style="padding:6px 12px;border:1px solid #e2e8f0;font-weight:600;color:#1e3a8a">${pr.id}</td>
-        <td style="padding:6px 12px;border:1px solid #e2e8f0;font-family:monospace">${pr.midi}</td>
-        <td style="padding:6px 12px;border:1px solid #e2e8f0;color:#374151">${assigned}</td>
-      </tr>`;
-    });
-    html += `</tbody></table>`;
-  }
-
-  // ── Postes fixes ──────────────────────────────────────────
-  if (showPostes) {
-    const posteTypes = [
-      { key:'accueil', label:'🏠 Accueil', color:'#7c3aed' },
-      { key:'csu', label:'📡 CSU', color:'#059669' },
-      { key:'chefposte', label:'⭐ Chef de Poste', color:'#dc2626' },
-    ];
-    const hasPostes = posteTypes.some(p => (vjPostes[p.key]||[]).length);
-    if (hasPostes) {
-      html += `<div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#1e3a8a;margin-bottom:10px;display:flex;align-items:center;gap:8px"><span style="display:inline-block;width:3px;height:16px;background:#2563eb;border-radius:2px;flex-shrink:0"></span>Postes fixes</div>`;
-      html += `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-bottom:20px">`;
-      posteTypes.forEach(p => {
-        const list = vjPostes[p.key] || [];
-        if (!list.length) return;
-        const rows = list.map(e => `<div style="padding:4px 0;border-bottom:1px solid #f1f5f9;font-size:11px;display:flex;justify-content:space-between">
-          <span style="font-weight:${e.chefSalle?'700':'400'};color:${e.chefSalle?p.color:'#334155'}">${e.nom||'—'}${e.chefSalle?' ★':''}</span>
-          <span style="font-size:10px;color:#94a3b8">${e.repas||''}</span>
-        </div>`).join('');
-        html += `<div style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden">
-          <div style="padding:8px 12px;background:#f8fafc;border-bottom:1px solid #e2e8f0;font-weight:700;font-size:12px;color:${p.color}">${p.label}</div>
-          <div style="padding:8px 12px">${rows}</div>
-        </div>`;
-      });
-      html += `</div>`;
-    }
-  }
-
-  // ── Missions régulières ───────────────────────────────────
-  const vjMissObjs = missions.filter(m => vjMissText.includes(m.text));
-  if (showMissions && vjMissObjs.length) {
-    html += `<div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#1e3a8a;margin-bottom:10px;display:flex;align-items:center;gap:8px"><span style="display:inline-block;width:3px;height:16px;background:#2563eb;border-radius:2px;flex-shrink:0"></span>Missions régulières</div>`;
-    html += `<div style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:20px">`;
-    vjMissObjs.forEach((m, i) => {
-      html += `<div style="display:flex;gap:10px;padding:7px 14px;border-bottom:1px solid #f1f5f9;${i%2===0?'background:#fafafa':''}">
-        <span style="font-family:monospace;font-size:10px;color:#0891b2;background:#ecfeff;border:1px solid #a5f3fc;padding:1px 7px;border-radius:4px;flex-shrink:0;align-self:flex-start;margin-top:1px">${m.num}</span>
-        <span style="font-size:11px;color:#334155;line-height:1.5">${m.text}</span>
-      </div>`;
-    });
-    html += `</div>`;
-  }
-
-  // ── Pied de page ──────────────────────────────────────────
-  html += `
-    <div style="border-top:1px solid #e2e8f0;padding-top:10px;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8">
-      <span>Police Municipale — Ville de Neuilly-sur-Seine</span>
-      <span>Brigade Jour · ${shift}</span>
-    </div>
-  </div>`;
-
-  content.innerHTML = html;
-}
-
-// ════════════════════════════════════════════
-//  IMPRESSION — VACATION PRÉPARÉE
-// ════════════════════════════════════════════
-
-function _openPrintWindow(htmlBody, title) {
-  const win = window.open('', '_blank', 'width=960,height=1200');
-  if (!win) { alert('Autorisez les popups pour imprimer.'); return; }
-  win.document.write(`<!DOCTYPE html><html lang="fr"><head>
-  <meta charset="UTF-8">
-  <title>${title}</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Inter',sans-serif;background:#fff;color:#111;font-size:12px;padding:20px 24px}
-    h1{font-size:18px;font-weight:800;color:#1e3a8a;margin-bottom:4px}
-    h2{font-size:14px;font-weight:700;color:#1e40af;margin:16px 0 8px;padding-bottom:4px;border-bottom:1px solid #e2e8f0}
-    h3{font-size:12px;font-weight:700;color:#334155;margin:10px 0 5px;text-transform:uppercase;letter-spacing:.05em}
-    .header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:12px;border-bottom:2px solid #1e3a8a;margin-bottom:16px}
-    .meta{font-size:11px;color:#64748b;text-align:right}
-    .badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;margin-right:3px}
-    .badge-blue{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe}
-    .badge-amber{background:#fef3c7;color:#92400e;border:1px solid #fde68a}
-    .badge-green{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
-    .badge-gray{background:#f8fafc;color:#475569;border:1px solid #e2e8f0}
-    .route-card{border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:14px;break-inside:avoid}
-    .route-header{padding:8px 12px;background:#f8fafc;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between}
-    .route-id{font-weight:800;font-size:14px;color:#1e40af;font-family:'DM Mono',monospace}
-    .route-body{padding:10px 12px}
-    .section-label{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;font-weight:600;margin:8px 0 4px}
-    .section-label:first-child{margin-top:0}
-    .agent-row{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #f1f5f9}
-    .agent-row:last-child{border-bottom:none}
-    .avatar{width:22px;height:22px;border-radius:5px;background:#eff6ff;color:#1d4ed8;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;flex-shrink:0}
-    .chef-star{color:#92400e;font-size:10px;margin-left:4px}
-    .mission-row{display:flex;gap:6px;padding:3px 0;font-size:11px;border-bottom:1px solid #f1f5f9}
-    .mission-row:last-child{border-bottom:none}
-    .mission-num{font-family:'DM Mono',monospace;font-size:9px;color:#0891b2;background:#ecfeff;padding:1px 5px;border-radius:3px;flex-shrink:0;margin-top:1px}
-    .consigne{font-size:11px;color:#475569;padding:5px 8px;background:#f8fafc;border-left:2px solid #cbd5e1;margin-top:4px;line-height:1.5}
-    .cards-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
-    .poste-section{border:1px solid #e2e8f0;border-radius:6px;padding:8px 12px;margin-bottom:8px}
-    .footer{margin-top:20px;padding-top:10px;border-top:1px solid #e2e8f0;font-size:10px;color:#94a3b8;display:flex;justify-content:space-between}
-    @media print{body{padding:8px}@page{margin:10mm 8mm}h2{break-before:avoid}.route-card{break-inside:avoid}}
-  </style>
-  </head><body>
-  <div class="header">
-    <div>
-      <h1>Police Municipale — Brigade Jour</h1>
-      <div style="font-size:12px;color:#475569;margin-top:2px">${title}</div>
-    </div>
-    <div class="meta">
-      <div>Imprimé le ${new Date().toLocaleString('fr-FR')}</div>
-      ${currentEditor ? `<div>Par : ${EDITOR_CODES[currentEditor]?.label || currentEditor}</div>` : ''}
-    </div>
-  </div>
-  ${htmlBody}
-  <div class="footer">
-    <span>Police Municipale · Ville de Neuilly-sur-Seine</span>
-    <span>Brigade Jour</span>
-  </div>
-  <script>window.onload=function(){window.print();}<\/script>
-  </body></html>`);
-  win.document.close();
-}
 
 function _routeToHTML(r) {
   const pr    = PAUSES_REPAS.find(p => p.id === r.repas);
@@ -6487,24 +4630,20 @@ function _routeToHTML(r) {
   </div>`;
 }
 
-function printPrepOverview() {
-  const picker = document.getElementById('prep-date-picker');
-  const dateObj = picker?.value ? new Date(picker.value + 'T12:00:00') : new Date();
-  const dateLabel = dateObj.toLocaleDateString('fr-FR', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+// ── Génère le HTML de la vue d'ensemble (utilisé par printPrepOverview et buildPrintPreview)
+function _buildOverviewHTML() {
+  const dateObj   = new Date();
+  const dateLabel = dateObj.toLocaleDateString('fr-FR', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
   const dateCapital = dateLabel.charAt(0).toUpperCase() + dateLabel.slice(1);
-
-  // Shift depuis le badge
   const shift = document.querySelector('.shift-badge')?.textContent?.trim() || '06H45 — 17H15';
 
   // Compteurs
-  const agentsPresents = new Set();
-  routesData.forEach(r => r.membres.forEach(m => { if(m.n) agentsPresents.add(m.n); }));
-  const nbPresents  = agentsPresents.size;
-  const nbEquipages = routesData.filter(r => r.membres.length > 0).length;
-  const nbMissions  = missions.length;
+  const nbPresents  = new Set(routesData.flatMap(r => (r.membres||[]).map(m=>m.n))).size;
+  const nbEquipages = routesData.filter(r => (r.membres||[]).length > 0).length;
+  const nbMissions  = regularMissions.length;
   const nbAgents    = agents.length;
 
-  // ── Équipages ──────────────────────────────────────────────
+  // Équipages
   const equipCards = routesData.map(r => {
     const pr    = PAUSES_REPAS.find(p => p.id === r.repas);
     const phone = r.telephone ? PHONES[r.telephone] : null;
@@ -6515,210 +4654,287 @@ function printPrepOverview() {
       phone      ? `<span class="badge green">📱 ${phone.label}</span>` : '',
     ].filter(Boolean).join('');
 
-    const membres = r.membres.length ? r.membres.map(m => {
+    const membres = (r.membres||[]).length ? r.membres.map(m => {
       const isChef = m.n === r.chef;
       const inits  = m.n.split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
+      const statutBadge = m.statut
+        ? `<span style="font-size:7px;color:#92400e;background:#fef3c7;border:1px solid #fde68a;padding:0 3px;border-radius:2px">${m.statut}</span>` : '';
       return `<div class="agent-row">
-        <div class="avatar" style="background:${isChef?'#fef3c7':'#eff6ff'};color:${isChef?'#92400e':'#1e40af'};border:1px solid ${isChef?'#fde68a':'#bfdbfe'}">${inits}</div>
-        <span style="flex:1;font-weight:${isChef?'700':'400'}">${m.n}${isChef?' <span style="color:#92400e;font-size:10px">★</span>':''}</span>
-        <span style="font-size:10px;color:#94a3b8">mat.${m.m||'—'}</span>
+        <div class="avatar" style="background:${isChef?'#fef3c7':'#eff6ff'};color:${isChef?'#92400e':'#1e40af'}">${inits}</div>
+        <span style="flex:1;font-weight:${isChef?'700':'400'}">${m.n}${isChef?' <span style="color:#92400e">★</span>':''} ${statutBadge}</span>
+        <span style="font-size:8px;color:#94a3b8">mat.${m.m||'—'}</span>
       </div>`;
-    }).join('') : '<div style="font-size:11px;color:#94a3b8;padding:4px 0">Aucun agent</div>';
+    }).join('') : '<div style="font-size:9px;color:#94a3b8">Aucun agent</div>';
 
     const zones = (r.zones||[]).length
-      ? `<div style="margin-top:5px;display:flex;gap:3px;flex-wrap:wrap">${r.zones.map(z=>`<span class="badge green">${z}</span>`).join('')}</div>` : '';
+      ? `<div style="margin-top:3px;display:flex;gap:2px;flex-wrap:wrap">${r.zones.map(z=>`<span class="badge blue">${z}</span>`).join('')}</div>` : '';
 
-    const specMiss = (r.missionsSpec||[]).length
-      ? `<div style="margin-top:5px;border-top:1px solid #f1f5f9;padding-top:4px">${r.missionsSpec.map(ms=>`<div style="font-size:10px;color:#475569;padding:1px 0">› ${ms}</div>`).join('')}</div>` : '';
+    const phoneLine = phone
+      ? `<div style="margin-top:3px;padding:2px 5px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:3px;font-size:8px;color:#059669;font-weight:700">📱 ${phone.num}</div>` : '';
 
-    const phoneBar = phone
-      ? `<div style="margin-top:4px;font-size:10px;color:#059669;font-weight:600">📱 ${phone.num}</div>` : '';
+    const specMissLines = (r.missionsSpec||[]).filter(Boolean).length
+      ? `<div style="margin-top:3px;padding:2px 5px;background:#fef9c3;border-left:2px solid #eab308;border-radius:2px">${
+          r.missionsSpec.filter(Boolean).map(ms=>`<div style="font-size:8px;color:#854d0e">⚡ ${ms}</div>`).join('')
+        }</div>` : '';
 
-    const consigneHTML = r.consignes
-      ? `<div style="margin-top:5px;border-top:1px solid #f1f5f9;padding-top:4px;font-size:10px;color:#374151;font-style:italic">${r.consignes.replace(/\n/g,'<br>')}</div>` : '';
+    const consigneLine = r.consignes
+      ? `<div style="margin-top:3px;padding:2px 5px;background:#f8fafc;border-left:2px solid #94a3b8;border-radius:2px;font-size:8px;color:#374151;font-style:italic">${r.consignes.replace(/\n/g,'<br>')}</div>` : '';
 
     return `<div class="equip-card">
-      <div class="equip-header">
-        <span class="equip-id">${r.id}</span>
-        <div style="display:flex;gap:3px;flex-wrap:wrap">${badges}</div>
-      </div>
-      <div class="equip-body">
-        ${membres}
-        ${zones}
-        ${phoneBar}
-        ${consigneHTML}
-        ${specMiss}
-      </div>
+      <div class="equip-header"><span class="equip-id">${r.id}</span><div style="display:flex;gap:2px;flex-wrap:wrap">${badges}</div></div>
+      <div class="equip-body">${membres}${zones}${phoneLine}${specMissLines}${consigneLine}</div>
     </div>`;
   }).join('');
 
-  // ── Postes fixes ───────────────────────────────────────────
+  // Postes fixes
   const posteTypes = [
-    { key:'accueil',   label:'🏠 Accueil',       color:'#7c3aed' },
-    { key:'csu',       label:'📡 CSU',            color:'#059669' },
-    { key:'chefposte', label:'⭐ Chef de Poste',  color:'#dc2626' },
+    { key:'accueil', label:'🏠 Accueil', color:'#7c3aed' },
+    { key:'csu',     label:'📡 CSU',     color:'#059669' },
+    { key:'chefposte', label:'⭐ Chef de Poste', color:'#dc2626' },
   ];
   const postesHTML = posteTypes.map(p => {
     const list = (postesData[p.key]||[]).filter(e=>e.nom);
     if (!list.length) return '';
     return `<div class="poste-box" style="border-left-color:${p.color}">
-      <div style="font-size:11px;font-weight:700;color:${p.color};margin-bottom:6px">${p.label}</div>
-      ${list.map(e => {
-        const pause = PAUSES_REPAS.find(pp=>pp.id===e.repas);
-        const inits = e.nom.split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
-        return `<div class="agent-row">
-          <div class="avatar" style="background:${p.color}18;color:${p.color}">${inits}</div>
-          <span style="flex:1;font-weight:${e.chefSalle?'700':'400'}">${e.nom}${e.chefSalle?' ★':''}</span>
-          ${pause?`<span style="font-size:10px;color:#94a3b8">${pause.id}</span>`:''}
-        </div>`;
+      <div style="font-size:9px;font-weight:700;color:${p.color};margin-bottom:4px">${p.label}</div>
+      ${list.map(e=>{
+        const pr2 = PAUSES_REPAS.find(pp=>pp.id===e.repas);
+        return `<div style="font-size:10px;padding:2px 0">• ${e.nom}${e.chefSalle?' ★':''}${pr2?` <span style="color:#64748b">${pr2.id}</span>`:''}${e.repas?'':''}</div>`;
       }).join('')}
     </div>`;
   }).filter(Boolean).join('');
 
-  // ── Pauses repas ───────────────────────────────────────────
+  // Pauses repas
   const pausesRows = PAUSES_REPAS.map(pr => {
-    const assigned = routesData.filter(r => r.repas === pr.id).map(r => r.id);
+    const assigned = routesData.filter(r => r.repas === pr.id).map(r=>r.id);
     return `<tr>
-      <td style="font-weight:700">${pr.id}</td>
-      <td style="color:#94a3b8">${pr.midi}</td>
-      <td>${assigned.length ? assigned.map(id=>`<span class="badge blue">${id}</span>`).join(' ') : '<span style="color:#94a3b8">—</span>'}</td>
+      <td style="font-weight:600;color:#1e3a8a">${pr.id}</td>
+      <td style="font-family:monospace;color:#64748b">${pr.midi}</td>
+      <td>${assigned.map(id=>`<span class="badge blue">${id}</span>`).join(' ') || '—'}</td>
     </tr>`;
   }).join('');
 
-  // ── Missions régulières ────────────────────────────────────
-  const selMissions = missions.filter(m => regularMissions.includes(m.text));
-  const missionsHTML = selMissions.length
-    ? selMissions.map((m, i) => `<tr style="background:${i%2===0?'#f8fafc':'#fff'}">
-        <td style="font-family:monospace;font-size:10px;color:#0891b2;white-space:nowrap">${m.num}</td>
-        <td style="font-size:11px">${m.text}${m.consigne?`<div style="font-size:10px;color:#64748b;margin-top:3px;padding-left:4px;border-left:2px solid #cbd5e1">${m.consigne}</div>`:''}</td>
-        <td style="font-size:10px;color:#64748b">${(m.equips||[]).join(', ')||'—'}</td>
-      </tr>`).join('')
-    : '<tr><td colspan="3" style="color:#94a3b8;font-size:11px">Aucune mission sélectionnée</td></tr>';
-
-  const css = `
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Inter',sans-serif;background:#fff;color:#111;font-size:11px;padding:12px 16px}
-    .page-header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:10px;border-bottom:3px solid #1e3a8a;margin-bottom:12px}
-    .page-title{font-size:18px;font-weight:900;color:#1e3a8a;font-family:'Inter',sans-serif}
-    .page-subtitle{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
-    .page-meta{text-align:right}
-    .page-date{font-size:12px;font-weight:700;color:#1e3a8a}
-    .page-shift{font-size:10px;color:#64748b;margin-top:1px}
-    .page-printed{font-size:9px;color:#94a3b8;margin-top:2px}
-    .counters{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px}
-    .counter{border:1px solid #e2e8f0;border-radius:6px;padding:6px 10px;border-left-width:3px}
-    .counter-label{font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:#64748b;font-weight:600;margin-bottom:2px}
-    .counter-val{font-size:20px;font-weight:900;line-height:1}
-    .c-blue{border-left-color:#2563eb}.c-blue .counter-val{color:#2563eb}
-    .c-cyan{border-left-color:#0891b2}.c-cyan .counter-val{color:#0891b2}
-    .c-amber{border-left-color:#d97706}.c-amber .counter-val{color:#d97706}
-    .c-green{border-left-color:#059669}.c-green .counter-val{color:#059669}
-    .section-title{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#1e3a8a;margin:10px 0 6px;display:flex;align-items:center;gap:5px}
-    .section-title::before{content:'';width:2px;height:12px;background:#2563eb;border-radius:2px;flex-shrink:0}
-    .equip-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:4px}
-    .equip-card{border:1px solid #e2e8f0;border-radius:6px;overflow:hidden}
-    .equip-header{padding:5px 8px;background:#f8fafc;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;gap:3px}
-    .equip-id{font-weight:800;font-size:12px;color:#1e40af}
-    .equip-body{padding:5px 8px}
-    .agent-row{display:flex;align-items:center;gap:5px;padding:2px 0;border-bottom:1px solid #f1f5f9}
-    .agent-row:last-child{border-bottom:none}
-    .avatar{width:18px;height:18px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:700;flex-shrink:0}
-    .badge{display:inline-flex;align-items:center;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:600}
-    .badge.blue{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe}
-    .badge.amber{background:#fef3c7;color:#92400e;border:1px solid #fde68a}
-    .badge.green{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
-    .postes-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:4px}
-    .poste-box{border:1px solid #e2e8f0;border-radius:6px;padding:7px 10px;border-left-width:2px}
-    table{width:100%;border-collapse:collapse;font-size:10px}
-    th{padding:4px 8px;text-align:left;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#64748b;background:#f8fafc;border-bottom:1px solid #e2e8f0}
-    td{padding:4px 8px;border-bottom:1px solid #f1f5f9;vertical-align:top}
-    tr:last-child td{border-bottom:none}
-    .footer{margin-top:12px;padding-top:8px;border-top:1px solid #e2e8f0;font-size:9px;color:#94a3b8;display:flex;justify-content:space-between}
-    @media print{
-      body{padding:6px}
-      @page{margin:5mm;size:A4 landscape}
-      .equip-grid{grid-template-columns:repeat(4,1fr)}
-      .section-title{break-after:avoid}
-      .equip-card,.poste-box{break-inside:avoid}
-    }
-  `;
-
-  const body = `
+  return `
     <div class="page-header">
-      <div>
-        <div class="page-title">PLANNING JOURNALIER</div>
-        <div class="page-subtitle">Police Municipale · Brigade Jour</div>
-      </div>
+      <div><div class="page-title">PLANNING JOURNALIER</div><div class="page-subtitle">Police Municipale · Brigade Jour</div></div>
       <div class="page-meta">
         <div class="page-date">${dateCapital}</div>
         <div class="page-shift">${shift}</div>
         <div class="page-printed">Imprimé le ${new Date().toLocaleString('fr-FR')}</div>
       </div>
     </div>
-
     <div class="counters">
       <div class="counter c-blue"><div class="counter-label">Effectifs présents</div><div class="counter-val">${nbPresents}</div></div>
       <div class="counter c-cyan"><div class="counter-label">Équipages actifs</div><div class="counter-val">${nbEquipages}</div></div>
       <div class="counter c-amber"><div class="counter-label">Missions actives</div><div class="counter-val">${nbMissions}</div></div>
       <div class="counter c-green"><div class="counter-label">Agents base</div><div class="counter-val">${nbAgents}</div></div>
     </div>
-
     <div class="section-title">Composition des équipages</div>
-    <div class="equip-grid">${equipCards || '<div style="color:#94a3b8;font-size:11px">Aucun équipage</div>'}</div>
-
-    ${postesHTML ? `<div class="section-title">Postes fixes</div><div class="postes-grid">${postesHTML}</div>` : ''}
-
+    <div class="equip-grid">${equipCards||'<div style="color:#94a3b8;font-size:10px">Aucun équipage</div>'}</div>
+    ${postesHTML?`<div class="section-title">Postes fixes</div><div class="postes-grid">${postesHTML}</div>`:''}
     <div class="section-title">Pauses repas</div>
-    <table>
-      <thead><tr><th>N° Pause</th><th>Créneau</th><th>Équipages</th></tr></thead>
-      <tbody>${pausesRows}</tbody>
-    </table>
+    <table><thead><tr><th>N° Pause</th><th>Créneau</th><th>Équipages</th></tr></thead><tbody>${pausesRows}</tbody></table>
+    <div class="footer"><span>Police Municipale — Ville de Neuilly-sur-Seine</span><span>Brigade Jour · ${shift}</span></div>
   `;
+}
 
-  const win = window.open('', '_blank', 'width=1050,height=1200');
-  if (!win) { alert('Autorisez les popups pour imprimer.'); return; }
-  win.document.write(`<!DOCTYPE html><html lang="fr"><head>
-    <meta charset="UTF-8">
-    <title>${dateCapital}</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <style>${css}</style>
-  </head><body>
-    ${body}
-    <div class="footer">
-      <span>Police Municipale — Ville de Neuilly-sur-Seine</span>
-      <span>Brigade Jour · ${shift}</span>
+function planningGoToday() {
+  prevSelectDay(normDate(new Date()));
+}
+
+let prevSelectedDate = normDate(new Date());
+let prevActiveSection = 'routes';
+
+function renderPrevCalendar() {
+  const strip = document.getElementById('prev-calendar-strip');
+  if (!strip) return;
+
+  const today = new Date();
+  const days = [];
+  for (let i = -15; i <= 45; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    const dateStr = normDate(d);
+    const jours = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+    const mois  = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+    days.push({ dateStr, num:d.getDate(), jourNom:jours[d.getDay()], mois:mois[d.getMonth()], isToday:i===0, isFuture:i>0 });
+  }
+
+  strip.innerHTML = days.map(day => {
+    const vac = getPrevVac(day.dateStr);
+    const hasData   = !!vac;
+    const hasAgents = !!(vac && vac.routes && vac.routes.some(r => r.membres && r.membres.length > 0));
+    const isActive  = prevSelectedDate === day.dateStr;
+    const dotColor  = hasAgents ? '#34d399' : hasData ? '#fbbf24' : 'transparent';
+    const dotGlow   = hasAgents ? 'box-shadow:0 0 5px #34d399' : hasData ? 'box-shadow:0 0 4px #fbbf24' : '';
+    return `<button onclick="prevSelectDay('${day.dateStr}')"
+      style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:3px;
+        padding:8px 12px;border-radius:10px;cursor:pointer;transition:all .15s;
+        font-family:'Inter',sans-serif;min-width:56px;
+        background:${isActive?'rgba(192,132,252,.22)':'var(--surface)'};
+        border:1px solid ${isActive?'rgba(192,132,252,.55)':day.isToday?'rgba(192,132,252,.35)':'var(--border)'};
+        opacity:${day.isFuture && !hasData ? '0.7' : '1'}">
+      <span style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:${isActive?'#e9d5ff':day.isToday?'#c084fc':'var(--text-3)'};font-weight:600">${day.jourNom}</span>
+      <span style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:${isActive?'#c084fc':day.isToday?'#a855f7':'var(--text-primary)'}">${day.num}</span>
+      <span style="font-size:9px;color:${isActive?'#e9d5ff':'var(--text-3)'}">${day.mois}</span>
+      <span style="width:6px;height:6px;border-radius:50%;margin-top:2px;background:${dotColor};${dotGlow}"></span>
+    </button>`;
+  }).join('');
+
+  setTimeout(() => {
+    const todayBtn = strip.children[15];
+    if (todayBtn) todayBtn.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' });
+  }, 50);
+}
+
+function prevSelectDay(dateStr) {
+  prevSelectedDate = dateStr;
+  renderPrevCalendar();
+  renderPrevDayContainer();
+}
+
+function renderPrevDayContainer() {
+  const el = document.getElementById('prev-day-container');
+  if (!el) return;
+
+  if (!prevSelectedDate) {
+    el.innerHTML = `<div style="text-align:center;padding:60px;color:var(--text-2);font-size:13px">
+      <div style="font-size:40px;margin-bottom:12px">📅</div>
+      Cliquez sur un jour pour voir la vacation enregistrée.
+    </div>`;
+    return;
+  }
+
+  const vac = getPrevVac(prevSelectedDate);
+
+  if (!vac) {
+    el.innerHTML = `<div style="text-align:center;padding:48px;color:var(--text-2);font-size:13px">
+      <div style="font-size:36px;margin-bottom:10px">📋</div>
+      <div>Aucune vacation enregistrée pour le <strong style="color:#c084fc">${prevSelectedDate}</strong></div>
+      <div style="margin-top:12px;font-size:12px;color:var(--text-3)">
+        Pour créer ou modifier une vacation, utilisez l'onglet <strong>Création/Modification vacation</strong>
+      </div>
+    </div>`;
+    return;
+  }
+
+  const savedBy  = vac.savedBy || '—';
+  const nbEquip  = (vac.routes||[]).filter(r => r.membres && r.membres.length > 0).length;
+  const nbAgents = new Set((vac.routes||[]).flatMap(r => (r.membres||[]).map(m => m.n))).size;
+
+  const equipCards = (vac.routes||[]).map(r => {
+    if (!r.membres || !r.membres.length) return '';
+    const pr = PAUSES_REPAS.find(p => p.id === r.repas);
+    const membres = r.membres.map(m => {
+      const isChef = m.n === r.chef;
+      return `<div style="display:flex;align-items:center;gap:7px;padding:4px 0;border-bottom:1px solid var(--border)">
+        <div class="agent-avatar ${isChef?'avatar-amber':'avatar-blue'}" style="width:24px;height:24px;font-size:9px">${initials(m.n||'?')}</div>
+        <span style="font-size:12px;font-weight:${isChef?'600':'400'};color:${isChef?'var(--amber)':'var(--text-1)'}">${m.n}${isChef?' ★':''}
+          ${m.statut?`<span style="font-size:10px;color:#fb923c;margin-left:4px">${m.statut}</span>`:''}
+        </span>
+        <span style="font-size:10px;color:var(--text-3);margin-left:auto">mat.${m.m||'—'}</span>
+      </div>`;
+    }).join('');
+    const phone = r.telephone ? PHONES[r.telephone] : null;
+    return `<div class="route-card">
+      <div class="route-header">
+        <span class="route-title">${r.id}</span>
+        <div style="display:flex;gap:4px;flex-wrap:wrap">
+          ${r.role?`<span class="badge badge-amber">${r.role}</span>`:''}
+          ${r.fourriere?`<span class="badge badge-amber">🚗</span>`:''}
+          ${pr?`<span class="badge ${pr.badge}">${pr.id}</span>`:''}
+          ${phone?`<span class="badge badge-green">📱 ${phone.label}</span>`:''}
+        </div>
+      </div>
+      <div class="route-body">${membres}
+        ${(r.zones||[]).length?`<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">${r.zones.map(z=>`<span class="badge badge-cyan">${z}</span>`).join('')}</div>`:''}
+        ${phone?`<div style="font-size:11px;color:#6ee7b7;margin-top:4px">📱 ${phone.num}</div>`:''}
+        ${r.consignes?`<div style="font-size:11px;color:var(--text-2);margin-top:4px;font-style:italic">${r.consignes.replace(/\n/g,'<br>')}</div>`:''}
+        ${(r.missionsSpec||[]).filter(Boolean).length?`<div style="margin-top:4px">${r.missionsSpec.filter(Boolean).map(ms=>`<div style="font-size:11px;color:#fbbf24">⚡ ${ms}</div>`).join('')}</div>`:''}
+      </div>
+    </div>`;
+  }).filter(Boolean).join('');
+
+  const posteTypes = [
+    { key:'accueil', label:'🏠 Accueil', color:'#a78bfa' },
+    { key:'csu', label:'📡 CSU', color:'#34d399' },
+    { key:'chefposte', label:'⭐ Chef de Poste', color:'#f87171' },
+  ];
+  const postesHTML = posteTypes.map(p => {
+    const list = (vac.postes?.[p.key]||[]).filter(e=>e.nom);
+    if (!list.length) return '';
+    return `<div class="post-section" style="padding:10px 14px;margin-bottom:0">
+      <div style="font-size:12px;font-weight:700;color:${p.color};margin-bottom:7px">${p.label}</div>
+      ${list.map(e=>{
+        const pr2 = PAUSES_REPAS.find(pp=>pp.id===e.repas);
+        return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0">
+          <div class="post-agent-avatar" style="background:${p.color}22;color:${p.color}">${initials(e.nom||'?')}</div>
+          <span style="font-size:13px">${e.nom}${e.chefSalle?' ★':''}</span>
+          ${pr2?`<span class="badge badge-gray" style="font-size:10px;margin-left:auto">${pr2.id}</span>`:''}
+        </div>`;
+      }).join('')}
+    </div>`;
+  }).filter(Boolean).join('');
+
+  el.innerHTML = `
+    <div style="background:var(--surface);border:1px solid rgba(192,132,252,.3);border-radius:var(--radius);padding:14px 18px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:#c084fc">📅 ${prevSelectedDate}</div>
+        <div style="font-size:11px;color:var(--text-2);margin-top:2px">${nbEquip} équipage(s) · ${nbAgents} agent(s)${savedBy!=='—'?' · Enregistré par '+savedBy:''}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${editMode?`<button onclick="planningLoadToPrep('${prevSelectedDate}')" style="background:rgba(192,132,252,.15);border:1px solid rgba(192,132,252,.4);color:#c084fc;padding:6px 14px;border-radius:var(--radius-sm);font-size:12px;cursor:pointer;font-family:'Inter',sans-serif">✏ Modifier</button>`:''}
+        <button onclick="planningPrintDay('${prevSelectedDate}')" style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);color:#fbbf24;padding:6px 14px;border-radius:var(--radius-sm);font-size:12px;cursor:pointer;font-family:'Inter',sans-serif">🖨 Imprimer</button>
+      </div>
     </div>
-    <script>window.onload=function(){window.print();}<\/script>
-  </body></html>`);
-  win.document.close();
+    <div class="section-title">Équipages</div>
+    <div class="route-grid" style="margin-bottom:16px">${equipCards||'<div style="color:var(--text-2);font-size:13px">Aucun équipage</div>'}</div>
+    ${postesHTML?`<div class="section-title">Postes fixes</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:16px">${postesHTML}</div>`:''}
+  `;
 }
 
-function printAllRoutes() {
+function planningLoadToPrep(dateStr) {
+  if (!editMode) { alertLock(); return; }
+  const vac = getPrevVac(dateStr);
+  if (!vac) return;
+  const parts = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  const isoDate = parts ? `${parts[3]}-${parts[2]}-${parts[1]}` : '';
+  routesData.length = 0;
+  (vac.routes||[]).forEach(r => routesData.push(JSON.parse(JSON.stringify(r))));
+  if (vac.postes) { Object.keys(postesData).forEach(k => { postesData[k] = []; }); Object.assign(postesData, JSON.parse(JSON.stringify(vac.postes))); }
+  showTab('preparee');
   const picker = document.getElementById('prep-date-picker');
-  const dateLabel = picker?.value
-    ? new Date(picker.value + 'T12:00:00').toLocaleDateString('fr-FR', {weekday:'long',year:'numeric',month:'long',day:'numeric'})
-    : 'Création/Modification vacation';
-
-  // Une page par feuille de route
-  const html = routesData.map((r, i) =>
-    `${i > 0 ? '<div style="page-break-before:always"></div>' : ''}
-     <h2>${r.id}${r.date ? ` — ${r.date}` : ''}</h2>
-     ${_routeToHTML(r)}`
-  ).join('');
-
-  _openPrintWindow(html || '<p style="color:#94a3b8">Aucune feuille de route.</p>',
-    `Feuilles de route — ${dateLabel.charAt(0).toUpperCase() + dateLabel.slice(1)}`);
+  if (picker && isoDate) { picker.value = isoDate; document.getElementById('prep-date-status').innerHTML = `<span style="color:#6ee7b7">✓ Vacation du ${dateStr} chargée</span>`; }
+  renderPrepVacation();
 }
 
-function printSingleRoute(idx) {
-  const r = routesData[idx];
-  if (!r) return;
-  const picker = document.getElementById('prep-date-picker');
-  const dateLabel = picker?.value
-    ? new Date(picker.value + 'T12:00:00').toLocaleDateString('fr-FR', {weekday:'long',year:'numeric',month:'long',day:'numeric'})
-    : r.date || '';
-  _openPrintWindow(_routeToHTML(r), `${r.id} — ${dateLabel.charAt(0).toUpperCase() + dateLabel.slice(1)}`);
+function planningPrintDay(dateStr) {
+  const vac = getPrevVac(dateStr);
+  if (!vac) return;
+  const savedRoutes = JSON.parse(JSON.stringify(routesData));
+  const savedPostes = JSON.parse(JSON.stringify(postesData));
+  const savedMissions = JSON.parse(JSON.stringify(regularMissions));
+  routesData.length = 0; (vac.routes||[]).forEach(r => routesData.push(r));
+  Object.assign(postesData, vac.postes || {});
+  regularMissions.length = 0; (vac.missions||[]).forEach(m => regularMissions.push(m));
+  printPrepOverview();
+  routesData.length = 0; savedRoutes.forEach(r => routesData.push(r));
+  Object.assign(postesData, savedPostes);
+  regularMissions.length = 0; savedMissions.forEach(m => regularMissions.push(m));
 }
+
+function getPrevVac(dateStr) {
+  if (!dateStr || !prevVacations) return null;
+  const norm = normDate(dateStr);
+  return prevVacations.find(v => normDate(v.dateStr||v.date||'') === norm);
+}
+
+function printPrepOverview() {
+  const body = _buildOverviewHTML();
+  const css = document.querySelector('style#overview-css')?.textContent || _getOverviewCSS();
+  _openPrintWindow(body, 'Planning Journalier', css);
+}
+
 
 function printTodayAllRoutes() {
   // Chercher la vacation du jour
@@ -6750,23 +4966,35 @@ function printTodayAllRoutes() {
 }
 
 function doPrint() {
-  buildPrintPreview();
-  const wrap = document.getElementById('print-root');
-  if (!wrap) { window.print(); return; }
-  const win = window.open('', '_blank', 'width=900,height=1100');
-  win.document.write(`<!DOCTYPE html><html lang="fr"><head>
-  <meta charset="UTF-8">
-  <title>Planning Journalier — Impression</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-  <style>
-    * { box-sizing:border-box; margin:0; padding:0; }
-    body { font-family:'Inter',sans-serif; background:#fff; color:#111; padding:24px 28px; font-size:13px; }
-    @media print { body { padding:10px; } @page { margin:12mm 10mm; } }
-  </style>
-  </head><body>${wrap.outerHTML}
-  <script>window.onload=function(){window.print();}<\/script>
-  </body></html>`);
-  win.document.close();
+  // Utiliser le même rendu que "Vue d'ensemble" dans Création/Modification
+  // mais avec les données de la vacation du jour enregistrée
+  const todayKey = normDate(new Date());
+  const vac = (prevVacations||[]).find(v => normDate(v.dateStr||v.date||'') === todayKey);
+
+  if (!vac) {
+    alert('Aucune vacation enregistrée pour aujourd\'hui.\nAllez dans Création/Modification vacation → 💾 Enregistrer');
+    return;
+  }
+
+  // Charger temporairement la vacation du jour dans routesData pour printPrepOverview
+  const savedRoutes = JSON.parse(JSON.stringify(routesData));
+  const savedPostes = JSON.parse(JSON.stringify(postesData));
+  const savedMissions = JSON.parse(JSON.stringify(regularMissions));
+
+  routesData.length = 0;
+  (vac.routes||[]).forEach(r => routesData.push(r));
+  Object.keys(postesData).forEach(k => { postesData[k] = vac.postes?.[k] || []; });
+  regularMissions.length = 0;
+  (vac.missions||[]).forEach(m => regularMissions.push(m));
+
+  printPrepOverview();
+
+  // Restaurer
+  routesData.length = 0;
+  savedRoutes.forEach(r => routesData.push(r));
+  Object.keys(postesData).forEach(k => { postesData[k] = savedPostes[k] || []; });
+  regularMissions.length = 0;
+  savedMissions.forEach(m => regularMissions.push(m));
 }
 
 // ════════════════════════════════════════════
@@ -7110,11 +5338,11 @@ if (_hadSaved) {
           <button class="add-btn" style="font-size:11px;padding:4px 10px" onclick="addMembreToRoute()">+ Ajouter un agent</button>
         </label>
         <!-- Statuts spéciaux -->
-        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">
-          <span style="font-size:10px;color:var(--text-3);align-self:center">Statut :</span>
-          <button onclick="addStatutSpecial('SPORT')" class="add-btn" style="font-size:10px;padding:2px 8px;background:rgba(251,146,60,.1);border-color:rgba(251,146,60,.3);color:#fb923c">🏃 SPORT</button>
-          <button onclick="addStatutSpecial('FE')" class="add-btn" style="font-size:10px;padding:2px 8px;background:rgba(251,146,60,.1);border-color:rgba(251,146,60,.3);color:#fb923c">📋 FE</button>
-          <button onclick="addStatutSpecial('DEPART AVANCE')" class="add-btn" style="font-size:10px;padding:2px 8px;background:rgba(251,146,60,.1);border-color:rgba(251,146,60,.3);color:#fb923c">⏰ Départ avancé</button>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;align-items:center">
+          <span style="font-size:10px;color:var(--text-3)">Statut :</span>
+          <button onclick="addStatutSpecial('SPORT')" class="add-btn" style="font-size:10px;padding:2px 10px;background:rgba(251,146,60,.1);border-color:rgba(251,146,60,.3);color:#fb923c">🏃 SPORT</button>
+          <button onclick="addStatutSpecial('FE')" class="add-btn" style="font-size:10px;padding:2px 10px;background:rgba(251,146,60,.1);border-color:rgba(251,146,60,.3);color:#fb923c">📋 FE</button>
+          <button onclick="addStatutSpecial('DEPART AVANCE')" class="add-btn" style="font-size:10px;padding:2px 10px;background:rgba(251,146,60,.1);border-color:rgba(251,146,60,.3);color:#fb923c">⏰ Départ avancé</button>
         </div>
         <div id="re-membres-list" style="margin-top:4px"></div>
       </div>
