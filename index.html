@@ -2711,19 +2711,28 @@ function _matchAgentToPlanning(agentNom, planningList) {
     container.innerHTML = r.membres.map((m, i) => {
       const isChef  = m.n === r.chef;
       const avail   = available.length ? _matchAgentToPlanning(m.n, available) : null;
-      const isSpecial = m.statut || ['SPORT','FE','DEPART AVANCE'].includes(m.n);
-      const statutLabel = m.statut || (isSpecial ? m.n : null);
-      const statutBadge = statutLabel
-        ? `<span style="font-size:10px;color:#fb923c;background:rgba(251,146,60,.1);border:1px solid rgba(251,146,60,.3);padding:1px 8px;border-radius:4px;margin-left:4px;font-weight:600">${statutLabel === 'DEPART AVANCE' ? '⏰ Départ avancé' : statutLabel === 'FE' ? '📋 FE' : '🏃 SPORT'}</span>`
-        : '';
+      const isSpecial = !!m.statut;
 
-      const borderColor = isSpecial ? 'rgba(251,146,60,.3)' : avail === true ? 'rgba(16,185,129,.35)' : avail === false ? 'rgba(239,68,68,.3)' : 'transparent';
-      const bgColor     = isSpecial ? 'rgba(251,146,60,.05)' : avail === true ? 'rgba(16,185,129,.06)' : avail === false ? 'rgba(239,68,68,.06)' : 'rgba(255,255,255,.03)';
-      const availBadge  = statutBadge || (avail === true
+      // Badge disponibilité / statut
+      const statutIcons = { 'SPORT':'🏃', 'FE':'📋', 'DEPART AVANCE':'⏰' };
+      const statutTxt   = m.statut === 'DEPART AVANCE' ? 'Départ avancé' : (m.statut || '');
+      const statutBadge = m.statut
+        ? '<span style="font-size:10px;color:#fb923c;background:rgba(251,146,60,.1);border:1px solid rgba(251,146,60,.3);padding:1px 8px;border-radius:4px;margin-left:4px;font-weight:600">'+(statutIcons[m.statut]||'📌')+' '+statutTxt+'</span>'
+        : '';
+      const availBadge = statutBadge || (avail === true
         ? '<span style="font-size:10px;color:#6ee7b7;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);padding:1px 6px;border-radius:4px;margin-left:4px">✓ Présent</span>'
         : avail === false
         ? '<span style="font-size:10px;color:#fca5a5;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);padding:1px 6px;border-radius:4px;margin-left:4px">✗ Absent</span>'
         : '');
+
+      const borderColor = isSpecial ? 'rgba(251,146,60,.3)' : avail === true ? 'rgba(16,185,129,.35)' : avail === false ? 'rgba(239,68,68,.3)' : 'transparent';
+      const bgColor     = isSpecial ? 'rgba(251,146,60,.05)' : avail === true ? 'rgba(16,185,129,.06)' : avail === false ? 'rgba(239,68,68,.06)' : 'rgba(255,255,255,.03)';
+
+      // Bouton statut
+      const statutBtnLabel = m.statut ? (statutIcons[m.statut]||'📌')+' '+(m.statut==='DEPART AVANCE'?'Dép. avancé':m.statut) : '📌';
+      const statutBtnStyle = m.statut
+        ? 'background:rgba(251,146,60,.2);border:1px solid rgba(251,146,60,.5);color:#fb923c;font-weight:700'
+        : 'background:var(--surface);border:1px solid var(--border);color:var(--text-3)';
 
       return `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;border-radius:8px;padding:7px 8px;border:1px solid ${borderColor};background:${bgColor}">
         <div class="agent-avatar ${isChef?'avatar-amber':'avatar-blue'}" style="flex-shrink:0;width:28px;height:28px;font-size:10px">${initials(m.n||'?')}</div>
@@ -2736,6 +2745,10 @@ function _matchAgentToPlanning(agentNom, planningList) {
         <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--amber);white-space:nowrap;cursor:pointer;padding:3px 7px;border-radius:5px;border:1px solid ${isChef?'rgba(245,158,11,.4)':'transparent'};background:${isChef?'rgba(245,158,11,.1)':'transparent'}">
           <input type="radio" name="chef-radio" ${isChef?'checked':''} onchange="setChefIdx(${i})"> Chef
         </label>
+        <button title="${m.statut?'Retirer le statut':'Attribuer un statut'}" onclick="cycleStatut(${i})"
+          style="font-size:10px;padding:3px 7px;border-radius:5px;cursor:pointer;font-family:'Inter',sans-serif;white-space:nowrap;${statutBtnStyle}">
+          ${statutBtnLabel || '📌'}
+        </button>
         <button style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#fca5a5;cursor:pointer;font-size:13px;padding:3px 7px;border-radius:5px" onclick="removeMembre(${i})">✕</button>
       </div>`;
     }).join('');
@@ -2823,6 +2836,15 @@ function _matchAgentToPlanning(agentNom, planningList) {
     refreshEditMembres();
   }
 
+  function cycleStatut(idx) {
+    const r = routesData[editingRouteIdx];
+    const statuts = [null, 'SPORT', 'FE', 'DEPART AVANCE'];
+    const current = r.membres[idx]?.statut || null;
+    const nextIdx = (statuts.indexOf(current) + 1) % statuts.length;
+    r.membres[idx].statut = statuts[nextIdx];
+    refreshEditMembres();
+  }
+
   function removeMembre(idx) {
     const r = routesData[editingRouteIdx];
     if (r.chef === r.membres[idx]?.n) r.chef = r.membres.find((_,i)=>i!==idx)?.n || '—';
@@ -2838,43 +2860,54 @@ function _matchAgentToPlanning(agentNom, planningList) {
   }
 
   function addStatutSpecial(statut) {
-    // Modale pour choisir l'agent à qui attribuer le statut
-    const modal = document.createElement('div');
-    modal.className = 'modal-overlay open';
-    modal.style.zIndex = '10002';
-    const agentOptions = agents.map(a =>
-      `<option value="${a.nom}">${a.nom} — mat.${a.mat||'—'}</option>`
-    ).join('');
-    const icons = { 'SPORT':'🏃', 'FE':'📋', 'DEPART AVANCE':'⏰' };
-    const icon = icons[statut] || '📌';
-    modal.innerHTML = `<div class="modal" style="width:380px;max-width:95vw">
-      <div class="modal-title">
-        <span>${icon} Attribuer le statut <strong style="color:#fb923c">${statut}</strong></span>
-        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">✕</button>
-      </div>
-      <div class="form-group" style="margin-bottom:16px">
-        <label class="form-label">Agent concerné</label>
-        <select id="statut-agent-select" class="form-select">
-          <option value="">— Sélectionner un agent —</option>
-          ${agentOptions}
-        </select>
-      </div>
-      <div class="btn-row">
-        <button class="btn-secondary" onclick="this.closest('.modal-overlay').remove()">Annuler</button>
-        <button class="btn-primary" onclick="
-          const nom = document.getElementById('statut-agent-select').value;
-          if (!nom) return;
-          const ag = window._agentsList?.find(a=>a.nom===nom);
-          routesData[editingRouteIdx].membres.push({ n: nom, m: ag?.mat||'', statut: '${statut}' });
-          _cachedAgentCount = -1;
-          refreshEditMembres();
-          this.closest('.modal-overlay').remove();
-        ">Confirmer</button>
-      </div>
-    </div>`;
-    modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
-    document.body.appendChild(modal);
-    setTimeout(() => document.getElementById('statut-agent-select')?.focus(), 80);
+    const r = routesData[editingRouteIdx];
+    if (!r.membres.length) {
+      alert('Ajoutez d\'abord un agent, puis attribuez-lui le statut.');
+      return;
+    }
+    if (r.membres.length === 1) {
+      // Un seul agent → appliquer directement
+      r.membres[0].statut = r.membres[0].statut === statut ? null : statut;
+      refreshEditMembres();
+    } else {
+      // Plusieurs agents → modale de choix
+      const modal = document.createElement('div');
+      modal.className = 'modal-overlay open';
+      modal.style.zIndex = '10002';
+      const icons = { 'SPORT':'🏃', 'FE':'📋', 'DEPART AVANCE':'⏰' };
+      const labels = { 'SPORT':'SPORT', 'FE':'FE', 'DEPART AVANCE':'Départ avancé' };
+      const options = r.membres.map((m,i) =>
+        `<button onclick="setMembreStatut(${i},'${statut}');this.closest('.modal-overlay').remove()"
+          style="width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);color:var(--text-1);
+          padding:10px 14px;border-radius:8px;cursor:pointer;font-family:'Inter',sans-serif;font-size:13px;
+          display:flex;align-items:center;gap:10px;margin-bottom:6px"
+          onmouseover="this.style.borderColor='rgba(251,146,60,.5)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div class="agent-avatar ${m.n===r.chef?'avatar-amber':'avatar-blue'}" style="width:28px;height:28px;font-size:10px">${initials(m.n||'?')}</div>
+          <span>${m.n}</span>
+          ${m.statut ? `<span style="font-size:10px;color:#fb923c;margin-left:auto">${m.statut}</span>` : ''}
+        </button>`
+      ).join('');
+      modal.innerHTML = `<div class="modal" style="width:360px;max-width:95vw">
+        <div class="modal-title">
+          <span>${icons[statut]} Attribuer <strong style="color:#fb923c">${labels[statut]}</strong> à :</span>
+          <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">✕</button>
+        </div>
+        <div style="margin-top:4px">${options}</div>
+        <div style="margin-top:8px">
+          <button class="btn-secondary" onclick="this.closest('.modal-overlay').remove()" style="width:100%">Annuler</button>
+        </div>
+      </div>`;
+      modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
+      document.body.appendChild(modal);
+    }
+  }
+
+  function setMembreStatut(idx, statut) {
+    const r = routesData[editingRouteIdx];
+    if (!r.membres[idx]) return;
+    // Toggle : cliquer deux fois retire le statut
+    r.membres[idx].statut = r.membres[idx].statut === statut ? null : statut;
+    refreshEditMembres();
   }
   function addSpecMissionRow(text) {
     const list = document.getElementById('re-missions-spec-list');
