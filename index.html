@@ -1747,9 +1747,17 @@ function renderVacationJour(targetISO) {
 
   // Équipages (lecture seule)
   const equipGrid = document.getElementById('vj-equip-grid');
-  if (equipGrid) equipGrid.innerHTML = !vjRoutes.length
-    ? `<div style="color:var(--text-2);font-size:13px;padding:16px 0">Aucun équipage enregistré pour cette date.</div>`
-    : vjRoutes.map(r => {
+  if (equipGrid) {
+    if (!vacAujourdhui) {
+      equipGrid.innerHTML = `<div style="color:var(--text-2);font-size:13px;padding:8px 0;grid-column:1/-1">
+        ${isToday
+          ? '⚠ Aucune vacation enregistrée pour aujourd\'hui. Allez dans <b>Création/Modification vacation</b> pour en créer une.'
+          : '⚠ Aucune vacation enregistrée pour cette date.'}
+      </div>`;
+    } else if (!vjRoutes.length) {
+      equipGrid.innerHTML = `<div style="color:var(--text-2);font-size:13px;padding:8px 0">Aucun équipage pour cette vacation.</div>`;
+    } else {
+      equipGrid.innerHTML = vjRoutes.map(r => {
     const pr = PAUSES_REPAS.find(p => p.id === r.repas);
     const roleB  = r.role     ? `<span class="badge badge-amber">${r.role}</span>` : '';
     const fourB  = r.fourriere ? `<span class="badge badge-amber">🚗 Fourrière</span>` : '';
@@ -1771,7 +1779,9 @@ function renderVacationJour(targetISO) {
         ${(r.zones||[]).length ? `<div class="equip-meta">${(r.zones||[]).map(z=>`<span class="badge badge-cyan">${z}</span>`).join('')}</div>` : ''}
       </div>
     </div>`;
-  }).join('');
+      }).join('');
+    }
+  }
 
   // Stats
   const agentsPresents = new Set();
