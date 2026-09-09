@@ -561,6 +561,33 @@
   .chef-salle-label:hover { background: rgba(16,185,129,.08); border-color: rgba(16,185,129,.25); }
   .chef-salle-label.active { background: rgba(16,185,129,.12); border-color: rgba(16,185,129,.35); }
   .chef-salle-label input[type=checkbox] { accent-color: var(--green); width: 13px; height: 13px; }
+
+  /* ── Attributs d'une ligne agent : Chef, SPORT, FE, Départ avancé ── */
+  .membre-row {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 6px; padding: 7px 8px;
+    border-radius: 8px; border: 1px solid transparent;
+  }
+  .membre-attrs { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; flex-shrink: 0; }
+  .attr-toggle {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-family: 'Inter', sans-serif; font-size: 10px; font-weight: 600; line-height: 1;
+    padding: 5px 8px; border-radius: var(--radius-sm); cursor: pointer;
+    white-space: nowrap; user-select: none; transition: all .15s;
+    background: rgba(255,255,255,.03); border: 1px solid var(--border); color: var(--text-2);
+  }
+  .attr-toggle:hover { border-color: var(--border-hi); color: var(--text-1); }
+  .attr-toggle:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
+  .attr-toggle.on-chef {
+    background: rgba(245,158,11,.14); border-color: rgba(245,158,11,.45); color: #fcd34d;
+  }
+  .attr-toggle.on-statut {
+    background: rgba(251,146,60,.18); border-color: rgba(251,146,60,.5); color: #fb923c;
+  }
+  @media (max-width: 720px) {
+    .membre-row { flex-wrap: wrap; }
+    .membre-attrs { width: 100%; }
+  }
   .post-remove-btn {
     background: rgba(239,68,68,.08); border: 1px solid rgba(239,68,68,.2);
     color: #fca5a5; padding: 4px 8px; border-radius: var(--radius-sm);
@@ -966,13 +993,13 @@ window._firebaseConfig = null; // sera remplacé par config.js si présent
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2);cursor:pointer">
-          <input type="checkbox" id="print-show-missions" checked style="accent-color:var(--cyan)"> Missions
+          <input type="checkbox" id="print-show-missions" checked onchange="buildPrintPreview()" style="accent-color:var(--cyan)"> Missions
         </label>
         <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2);cursor:pointer">
-          <input type="checkbox" id="print-show-postes" checked style="accent-color:var(--cyan)"> Postes fixes
+          <input type="checkbox" id="print-show-postes" checked onchange="buildPrintPreview()" style="accent-color:var(--cyan)"> Postes fixes
         </label>
         <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2);cursor:pointer">
-          <input type="checkbox" id="print-show-pauses" checked style="accent-color:var(--cyan)"> Pauses repas
+          <input type="checkbox" id="print-show-pauses" checked onchange="buildPrintPreview()" style="accent-color:var(--cyan)"> Pauses repas
         </label>
         <button onclick="buildPrintPreview()" style="background:rgba(6,182,212,0.12);border:1px solid rgba(6,182,212,0.35);color:#67e8f9;padding:6px 14px;border-radius:var(--radius-sm);font-size:12px;cursor:pointer;font-family:'Inter',sans-serif">↺ Actualiser</button>
         <button onclick="doPrint()" style="background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.4);color:#fbbf24;padding:6px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif">🖨 Vue d'ensemble</button>
@@ -1385,6 +1412,38 @@ window._firebaseConfig = null; // sera remplacé par config.js si présent
 </div>
 
 <script>
+// ════════════════════════════════════════════
+//  ATTRIBUTS AGENT
+//  SPORT / FE / Départ avancé sont des attributs
+//  posés sur une ligne agent existante — au même
+//  titre que Chef. Jamais un membre à part.
+// ════════════════════════════════════════════
+const STATUTS_AGENT = [
+  { key:'SPORT',         icon:'🏃', label:'SPORT',         short:'SPORT' },
+  { key:'FE',            icon:'📋', label:'FE',            short:'FE' },
+  { key:'DEPART AVANCE', icon:'⏰', label:'Départ avancé', short:'Dép. avancé' },
+];
+const STATUT_KEYS = STATUTS_AGENT.map(s => s.key);
+function statutDef(k)   { return STATUTS_AGENT.find(s => s.key === k) || null; }
+function statutLabel(k) { const d = statutDef(k); return d ? d.label : (k || ''); }
+function statutIcon(k)  { const d = statutDef(k); return d ? d.icon  : '📌'; }
+
+// Nettoie les anciennes données où un statut avait été saisi
+// comme un faux agent dans la liste des membres.
+function _migrateStatutMembres() {
+  let n = 0;
+  const clean = (routes) => (routes || []).forEach(r => {
+    if (!r || !Array.isArray(r.membres)) return;
+    const before = r.membres.length;
+    r.membres = r.membres.filter(m => !STATUT_KEYS.includes((m.n || '').trim().toUpperCase()));
+    n += before - r.membres.length;
+    if (!r.membres.some(m => m.n === r.chef)) r.chef = r.membres[0]?.n || '—';
+  });
+  clean(typeof routesData !== 'undefined' ? routesData : []);
+  (typeof prevVacations !== 'undefined' ? prevVacations || [] : []).forEach(v => clean(v.routes));
+  if (n) console.info('[migration] %d ligne(s) « statut » convertie(s) : les statuts sont désormais des attributs d\'agent.', n);
+}
+
 // ════════════════════════════════════════════
 //  DATA
 // ════════════════════════════════════════════
@@ -2694,14 +2753,9 @@ function _matchAgentToPlanning(agentNom, planningList) {
       }).join('');
     }
 
-    // Options spéciales (indisponibilités / formations)
-    const specialOpts = `<optgroup label="── Statuts spéciaux ──">
-      <option value="SPORT">SPORT</option>
-      <option value="FE">FE — Formation Entraînement</option>
-      <option value="DEPART AVANCE">Départ avancé</option>
-    </optgroup>`;
-
-    return '<option value="">— Sélectionner —</option>' + _cachedAgentOpts + specialOpts;
+    // Les statuts (SPORT / FE / Départ avancé) ne sont pas des agents :
+    // ils s'attribuent sur la ligne, via les boutons d'attribut.
+    return '<option value="">— Sélectionner —</option>' + _cachedAgentOpts;
   }
 
   function refreshEditMembres() {
@@ -2719,47 +2773,42 @@ function _matchAgentToPlanning(agentNom, planningList) {
     }
 
     container.innerHTML = r.membres.map((m, i) => {
-      const isChef  = m.n === r.chef;
-      const avail   = available.length ? _matchAgentToPlanning(m.n, available) : null;
+      const isChef    = m.n === r.chef;
+      const avail     = available.length ? _matchAgentToPlanning(m.n, available) : null;
       const isSpecial = !!m.statut;
 
-      // Badge disponibilité / statut
-      const statutIcons = { 'SPORT':'🏃', 'FE':'📋', 'DEPART AVANCE':'⏰' };
-      const statutTxt   = m.statut === 'DEPART AVANCE' ? 'Départ avancé' : (m.statut || '');
-      const statutBadge = m.statut
-        ? '<span style="font-size:10px;color:#fb923c;background:rgba(251,146,60,.1);border:1px solid rgba(251,146,60,.3);padding:1px 8px;border-radius:4px;margin-left:4px;font-weight:600">'+(statutIcons[m.statut]||'📌')+' '+statutTxt+'</span>'
-        : '';
-      const availBadge = statutBadge || (avail === true
+      const availBadge = avail === true
         ? '<span style="font-size:10px;color:#6ee7b7;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);padding:1px 6px;border-radius:4px;margin-left:4px">✓ Présent</span>'
         : avail === false
         ? '<span style="font-size:10px;color:#fca5a5;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);padding:1px 6px;border-radius:4px;margin-left:4px">✗ Absent</span>'
-        : '');
+        : '';
 
       const borderColor = isSpecial ? 'rgba(251,146,60,.3)' : avail === true ? 'rgba(16,185,129,.35)' : avail === false ? 'rgba(239,68,68,.3)' : 'transparent';
       const bgColor     = isSpecial ? 'rgba(251,146,60,.05)' : avail === true ? 'rgba(16,185,129,.06)' : avail === false ? 'rgba(239,68,68,.06)' : 'rgba(255,255,255,.03)';
 
-      // Bouton statut
-      const statutBtnLabel = m.statut ? (statutIcons[m.statut]||'📌')+' '+(m.statut==='DEPART AVANCE'?'Dép. avancé':m.statut) : '📌';
-      const statutBtnStyle = m.statut
-        ? 'background:rgba(251,146,60,.2);border:1px solid rgba(251,146,60,.5);color:#fb923c;font-weight:700'
-        : 'background:var(--surface);border:1px solid var(--border);color:var(--text-3)';
+      // Chef et statuts : même contrôle, posé sur la ligne de l'agent
+      const attrs = [
+        `<button type="button" class="attr-toggle ${isChef?'on-chef':''}"
+           aria-pressed="${isChef}" title="${isChef?'Retirer le rôle de chef d\'équipage':'Désigner chef d\'équipage'}"
+           onclick="toggleChef(${i})">★ Chef</button>`,
+        ...STATUTS_AGENT.map(s => {
+          const on = m.statut === s.key;
+          return `<button type="button" class="attr-toggle ${on?'on-statut':''}"
+            aria-pressed="${on}" title="${on?'Retirer '+s.label:'Attribuer '+s.label}"
+            onclick="toggleStatut(${i},'${s.key}')">${s.icon} ${s.short}</button>`;
+        })
+      ].join('');
 
-      return `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;border-radius:8px;padding:7px 8px;border:1px solid ${borderColor};background:${bgColor}">
+      return `<div class="membre-row" style="border-color:${borderColor};background:${bgColor}">
         <div class="agent-avatar ${isChef?'avatar-amber':'avatar-blue'}" style="flex-shrink:0;width:28px;height:28px;font-size:10px">${initials(m.n||'?')}</div>
-        <div style="flex:1;min-width:0">
+        <div style="flex:1;min-width:140px">
           <select class="form-select" style="width:100%;font-size:12px" onchange="updMembre(${i},this.value)">
             ${_getAgentOpts(m.n)}
           </select>
           ${availBadge}
         </div>
-        <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--amber);white-space:nowrap;cursor:pointer;padding:3px 7px;border-radius:5px;border:1px solid ${isChef?'rgba(245,158,11,.4)':'transparent'};background:${isChef?'rgba(245,158,11,.1)':'transparent'}">
-          <input type="radio" name="chef-radio" ${isChef?'checked':''} onchange="setChefIdx(${i})"> Chef
-        </label>
-        <button title="${m.statut?'Retirer le statut':'Attribuer un statut'}" onclick="cycleStatut(${i})"
-          style="font-size:10px;padding:3px 7px;border-radius:5px;cursor:pointer;font-family:'Inter',sans-serif;white-space:nowrap;${statutBtnStyle}">
-          ${statutBtnLabel || '📌'}
-        </button>
-        <button style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#fca5a5;cursor:pointer;font-size:13px;padding:3px 7px;border-radius:5px" onclick="removeMembre(${i})">✕</button>
+        <div class="membre-attrs">${attrs}</div>
+        <button type="button" title="Retirer l'agent de l'équipage" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#fca5a5;cursor:pointer;font-size:13px;padding:4px 8px;border-radius:var(--radius-sm);flex-shrink:0" onclick="removeMembre(${i})">✕</button>
       </div>`;
     }).join('');
 
@@ -2834,26 +2883,31 @@ function _matchAgentToPlanning(agentNom, planningList) {
   function updMembre(idx, nom) {
     const r = routesData[editingRouteIdx];
     const ag = agents.find(a => a.nom === nom);
-    if (r.chef === r.membres[idx]?.n) r.chef = nom;
-    r.membres[idx] = { n: nom, m: ag ? ag.mat : '' };
+    const prev = r.membres[idx] || {};
+    if (r.chef === prev.n) r.chef = nom;
+    // Changer d'agent ne doit pas effacer les attributs posés sur la ligne
+    r.membres[idx] = { n: nom, m: ag ? ag.mat : '', statut: prev.statut || null };
     _cachedAgentCount = -1; // invalider cache couleurs
     refreshEditMembres();
   }
 
-  function setChefIdx(idx) {
+  // Chef : attribut de ligne, comme les statuts. Recliquer le retire.
+  function toggleChef(idx) {
     const r = routesData[editingRouteIdx];
-    r.chef = r.membres[idx]?.n || '—';
+    const nom = r.membres[idx]?.n || '';
+    r.chef = (r.chef === nom && nom) ? '—' : (nom || '—');
     refreshEditMembres();
   }
 
-  function cycleStatut(idx) {
+  // SPORT / FE / Départ avancé : un seul statut par agent, recliquer le retire.
+  function toggleStatut(idx, key) {
     const r = routesData[editingRouteIdx];
-    const statuts = [null, 'SPORT', 'FE', 'DEPART AVANCE'];
-    const current = r.membres[idx]?.statut || null;
-    const nextIdx = (statuts.indexOf(current) + 1) % statuts.length;
-    r.membres[idx].statut = statuts[nextIdx];
+    if (!r.membres[idx]) return;
+    r.membres[idx].statut = r.membres[idx].statut === key ? null : key;
     refreshEditMembres();
   }
+
+
 
   function removeMembre(idx) {
     const r = routesData[editingRouteIdx];
@@ -2864,61 +2918,14 @@ function _matchAgentToPlanning(agentNom, planningList) {
   }
 
   function addMembreToRoute() {
-    routesData[editingRouteIdx].membres.push({ n: agents[0]?.nom || '', m: agents[0]?.mat || '' });
+    const r = routesData[editingRouteIdx];
+    r.membres.push({ n: agents[0]?.nom || '', m: agents[0]?.mat || '', statut: null });
+    // Premier agent de l'équipage : il prend le badge Chef par défaut
+    if (r.membres.length === 1) r.chef = r.membres[0].n || '—';
     _cachedAgentCount = -1;
     refreshEditMembres();
   }
 
-  function addStatutSpecial(statut) {
-    const r = routesData[editingRouteIdx];
-    if (!r.membres.length) {
-      alert('Ajoutez d\'abord un agent, puis attribuez-lui le statut.');
-      return;
-    }
-    if (r.membres.length === 1) {
-      // Un seul agent → appliquer directement
-      r.membres[0].statut = r.membres[0].statut === statut ? null : statut;
-      refreshEditMembres();
-    } else {
-      // Plusieurs agents → modale de choix
-      const modal = document.createElement('div');
-      modal.className = 'modal-overlay open';
-      modal.style.zIndex = '10002';
-      const icons = { 'SPORT':'🏃', 'FE':'📋', 'DEPART AVANCE':'⏰' };
-      const labels = { 'SPORT':'SPORT', 'FE':'FE', 'DEPART AVANCE':'Départ avancé' };
-      const options = r.membres.map((m,i) =>
-        `<button onclick="setMembreStatut(${i},'${statut}');this.closest('.modal-overlay').remove()"
-          style="width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);color:var(--text-1);
-          padding:10px 14px;border-radius:8px;cursor:pointer;font-family:'Inter',sans-serif;font-size:13px;
-          display:flex;align-items:center;gap:10px;margin-bottom:6px"
-          onmouseover="this.style.borderColor='rgba(251,146,60,.5)'" onmouseout="this.style.borderColor='var(--border)'">
-          <div class="agent-avatar ${m.n===r.chef?'avatar-amber':'avatar-blue'}" style="width:28px;height:28px;font-size:10px">${initials(m.n||'?')}</div>
-          <span>${m.n}</span>
-          ${m.statut ? `<span style="font-size:10px;color:#fb923c;margin-left:auto">${m.statut}</span>` : ''}
-        </button>`
-      ).join('');
-      modal.innerHTML = `<div class="modal" style="width:360px;max-width:95vw">
-        <div class="modal-title">
-          <span>${icons[statut]} Attribuer <strong style="color:#fb923c">${labels[statut]}</strong> à :</span>
-          <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">✕</button>
-        </div>
-        <div style="margin-top:4px">${options}</div>
-        <div style="margin-top:8px">
-          <button class="btn-secondary" onclick="this.closest('.modal-overlay').remove()" style="width:100%">Annuler</button>
-        </div>
-      </div>`;
-      modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
-      document.body.appendChild(modal);
-    }
-  }
-
-  function setMembreStatut(idx, statut) {
-    const r = routesData[editingRouteIdx];
-    if (!r.membres[idx]) return;
-    // Toggle : cliquer deux fois retire le statut
-    r.membres[idx].statut = r.membres[idx].statut === statut ? null : statut;
-    refreshEditMembres();
-  }
   function addSpecMissionRow(text) {
     const list = document.getElementById('re-missions-spec-list');
     const div = document.createElement('div');
@@ -3231,7 +3238,8 @@ _loadPreloadedPlanning();
       allRegMissions.forEach(m => regularMissions.push(m));
     }
     r.missionsSpec = [...document.querySelectorAll('#re-missions-spec-list textarea')].map(t=>t.value.trim()).filter(Boolean);
-    if (!r.chef || r.chef === '—') { r.chef = r.membres[0]?.n || '—'; }
+    // Le badge Chef fait foi : s'il a été retiré, on ne le réattribue pas d'office.
+    if (r.chef == null || r.chef === '') r.chef = '—';
     logAction('modif', `Feuille de route ${r.id}`, `Chef : ${r.chef} · Agents : ${r.membres.map(m=>m.n).join(', ') || '—'}`);
     closeModal('modalEditRoute');
     saveData();
@@ -4544,9 +4552,12 @@ function _routeToHTML(r) {
     ? r.membres.map(m => {
         const isChef = m.n === r.chef;
         const inits = m.n.split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
+        const st = m.statut
+          ? `<span class="badge statut">${statutIcon(m.statut)} ${statutLabel(m.statut)}</span>` : '';
         return `<div class="agent-row">
           <div class="avatar" style="background:${isChef?'#fef3c7':'#eff6ff'};color:${isChef?'#92400e':'#1e40af'}">${inits}</div>
           <span style="font-weight:${isChef?'700':'400'}">${m.n}${isChef?'<span style="color:#92400e;font-size:10px"> ★ Chef</span>':''}</span>
+          ${st}
           <span style="font-size:10px;color:#94a3b8;margin-left:auto">Mat. ${m.m||'—'}</span>
         </div>`;
       }).join('')
@@ -4658,7 +4669,7 @@ function _buildOverviewHTML() {
       const isChef = m.n === r.chef;
       const inits  = m.n.split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
       const statutBadge = m.statut
-        ? `<span style="font-size:7px;color:#92400e;background:#fef3c7;border:1px solid #fde68a;padding:0 3px;border-radius:2px">${m.statut}</span>` : '';
+        ? `<span class="badge statut">${statutIcon(m.statut)} ${statutLabel(m.statut)}</span>` : '';
       return `<div class="agent-row">
         <div class="avatar" style="background:${isChef?'#fef3c7':'#eff6ff'};color:${isChef?'#92400e':'#1e40af'}">${inits}</div>
         <span style="flex:1;font-weight:${isChef?'700':'400'}">${m.n}${isChef?' <span style="color:#92400e">★</span>':''} ${statutBadge}</span>
@@ -4673,7 +4684,7 @@ function _buildOverviewHTML() {
       ? `<div style="margin-top:3px;padding:2px 5px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:3px;font-size:8px;color:#059669;font-weight:700">📱 ${phone.num}</div>` : '';
 
     const specMissLines = (r.missionsSpec||[]).filter(Boolean).length
-      ? `<div style="margin-top:3px;padding:2px 5px;background:#fef9c3;border-left:2px solid #eab308;border-radius:2px">${
+      ? `<div data-ov="missions" style="margin-top:3px;padding:2px 5px;background:#fef9c3;border-left:2px solid #eab308;border-radius:2px">${
           r.missionsSpec.filter(Boolean).map(ms=>`<div style="font-size:8px;color:#854d0e">⚡ ${ms}</div>`).join('')
         }</div>` : '';
 
@@ -4731,9 +4742,11 @@ function _buildOverviewHTML() {
     </div>
     <div class="section-title">Composition des équipages</div>
     <div class="equip-grid">${equipCards||'<div style="color:#94a3b8;font-size:10px">Aucun équipage</div>'}</div>
-    ${postesHTML?`<div class="section-title">Postes fixes</div><div class="postes-grid">${postesHTML}</div>`:''}
-    <div class="section-title">Pauses repas</div>
-    <table><thead><tr><th>N° Pause</th><th>Créneau</th><th>Équipages</th></tr></thead><tbody>${pausesRows}</tbody></table>
+    ${postesHTML?`<div data-ov="postes"><div class="section-title">Postes fixes</div><div class="postes-grid">${postesHTML}</div></div>`:''}
+    <div data-ov="pauses">
+      <div class="section-title">Pauses repas</div>
+      <table><thead><tr><th>N° Pause</th><th>Créneau</th><th>Équipages</th></tr></thead><tbody>${pausesRows}</tbody></table>
+    </div>
     <div class="footer"><span>Police Municipale — Ville de Neuilly-sur-Seine</span><span>Brigade Jour · ${shift}</span></div>
   `;
 }
@@ -4830,7 +4843,7 @@ function renderPrevDayContainer() {
       return `<div style="display:flex;align-items:center;gap:7px;padding:4px 0;border-bottom:1px solid var(--border)">
         <div class="agent-avatar ${isChef?'avatar-amber':'avatar-blue'}" style="width:24px;height:24px;font-size:9px">${initials(m.n||'?')}</div>
         <span style="font-size:12px;font-weight:${isChef?'600':'400'};color:${isChef?'var(--amber)':'var(--text-1)'}">${m.n}${isChef?' ★':''}
-          ${m.statut?`<span style="font-size:10px;color:#fb923c;margin-left:4px">${m.statut}</span>`:''}
+          ${m.statut?`<span style="font-size:10px;color:#fb923c;margin-left:4px">${statutIcon(m.statut)} ${statutLabel(m.statut)}</span>`:''}
         </span>
         <span style="font-size:10px;color:var(--text-3);margin-left:auto">mat.${m.m||'—'}</span>
       </div>`;
@@ -4929,10 +4942,182 @@ function getPrevVac(dateStr) {
   return prevVacations.find(v => normDate(v.dateStr||v.date||'') === norm);
 }
 
+// ── Feuille de style commune aux impressions (rendu clair, A4) ──
+function _getPrintCSS() {
+  return `
+  @page { size: A4; margin: 10mm; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #fff; color: #0f172a;
+    font-family: 'Inter', 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 11px; line-height: 1.45;
+  }
+  h2 { font-size: 14px; margin: 0 0 6px; color: #1e3a8a; }
+
+  /* En-tête de page */
+  .page-header {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    border-bottom: 2px solid #1e3a8a; padding-bottom: 6px; margin-bottom: 10px;
+  }
+  .page-title    { font-size: 17px; font-weight: 700; color: #1e3a8a; letter-spacing: .01em; }
+  .page-subtitle { font-size: 10px; color: #64748b; }
+  .page-meta     { text-align: right; }
+  .page-date     { font-size: 11px; font-weight: 600; color: #0f172a; }
+  .page-shift    { font-size: 10px; color: #475569; }
+  .page-printed  { font-size: 8px;  color: #94a3b8; }
+
+  /* Compteurs */
+  .counters { display: flex; gap: 6px; margin-bottom: 10px; }
+  .counter  { flex: 1; border: 1px solid #e2e8f0; border-top: 3px solid #94a3b8; border-radius: 4px; padding: 5px 8px; }
+  .counter-label { font-size: 8px; color: #64748b; }
+  .counter-val   { font-size: 17px; font-weight: 700; color: #0f172a; }
+  .c-blue  { border-top-color: #2563eb; }
+  .c-cyan  { border-top-color: #0891b2; }
+  .c-amber { border-top-color: #d97706; }
+  .c-green { border-top-color: #059669; }
+
+  .section-title {
+    font-size: 11px; font-weight: 700; color: #1e3a8a;
+    border-bottom: 1px solid #cbd5e1; padding-bottom: 2px; margin: 10px 0 6px;
+  }
+  .section-label {
+    font-size: 9px; font-weight: 700; color: #475569;
+    margin: 8px 0 3px;
+  }
+
+  /* Équipages */
+  .equip-grid  { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .postes-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .equip-card, .route-card, .poste-box {
+    border: 1px solid #cbd5e1; border-radius: 4px; background: #fff;
+    break-inside: avoid; page-break-inside: avoid;
+  }
+  .poste-box   { border-left: 3px solid #94a3b8; padding: 6px 8px; }
+  .equip-header, .route-header {
+    display: flex; justify-content: space-between; align-items: center; gap: 6px;
+    background: #f1f5f9; border-bottom: 1px solid #cbd5e1; padding: 4px 7px;
+  }
+  .equip-id, .route-id { font-weight: 700; color: #1e3a8a; font-size: 11px; }
+  .route-id  { font-size: 13px; }
+  .equip-body, .route-body { padding: 6px 7px; }
+
+  .agent-row { display: flex; align-items: center; gap: 5px; padding: 2px 0; }
+  .avatar {
+    width: 16px; height: 16px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 7px; font-weight: 700; flex-shrink: 0;
+  }
+
+  /* Badges */
+  .badge {
+    display: inline-block; font-size: 8px; font-weight: 600;
+    padding: 1px 5px; border-radius: 3px; white-space: nowrap;
+    border: 1px solid #cbd5e1; background: #f8fafc; color: #334155;
+  }
+  .badge.blue,  .badge-blue  { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
+  .badge.amber, .badge-amber { background: #fffbeb; border-color: #fde68a; color: #b45309; }
+  .badge.green, .badge-green { background: #f0fdf4; border-color: #bbf7d0; color: #047857; }
+  .badge.gray,  .badge-gray  { background: #f8fafc; border-color: #e2e8f0; color: #475569; }
+  .badge.statut { background: #fff7ed; border-color: #fdba74; color: #c2410c; }
+
+  /* Missions et consignes */
+  .mission-row { display: flex; gap: 5px; align-items: baseline; padding: 1px 0; }
+  .mission-num { font-family: 'DM Mono', monospace; font-size: 8px; color: #0891b2; flex-shrink: 0; }
+  .consigne {
+    background: #f8fafc; border-left: 2px solid #94a3b8;
+    padding: 3px 6px; font-size: 9px; color: #334155; font-style: italic;
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: 9px; }
+  th {
+    background: #f1f5f9; border: 1px solid #cbd5e1; padding: 3px 6px;
+    text-align: left; color: #1e3a8a; font-size: 8px;
+  }
+  td { border: 1px solid #e2e8f0; padding: 3px 6px; }
+
+  .footer {
+    display: flex; justify-content: space-between;
+    margin-top: 12px; padding-top: 5px; border-top: 1px solid #cbd5e1;
+    font-size: 8px; color: #94a3b8;
+  }
+  `;
+}
+function _getOverviewCSS() { return _getPrintCSS(); }
+
+// ── Ouvre la fenêtre d'impression (point d'entrée unique) ──
+function _openPrintWindow(body, title, css) {
+  const w = window.open('', '_blank', 'width=1100,height=800');
+  if (!w) {
+    alert('L\'impression a été bloquée. Autorisez les fenêtres pop-up pour ce site, puis relancez.');
+    return;
+  }
+  w.document.open();
+  w.document.write(
+    '<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">' +
+    '<title>' + (title || 'Impression') + '</title>' +
+    '<style>' + (css || _getPrintCSS()) + '</style></head><body>' +
+    body + '</body></html>'
+  );
+  w.document.close();
+  w.focus();
+  setTimeout(() => { try { w.print(); } catch(e) { console.warn('Impression :', e); } }, 400);
+}
+
+function _routeTitle(r) {
+  return `${r.id}${r.date ? ' — ' + r.date : ''}`;
+}
+
+// ── Les trois points d'impression des feuilles de route ──
+function printRoute(idx) {
+  const r = routesData[idx];
+  if (!r) { alert('Feuille de route introuvable.'); return; }
+  _openPrintWindow(`<h2>${_routeTitle(r)}</h2>${_routeToHTML(r)}`, `Feuille de route — ${r.id}`);
+}
+
+function printSingleRoute(idx) { printRoute(idx); }
+
+function printAllRoutes() {
+  if (!routesData.length) { alert('Aucune feuille de route à imprimer.'); return; }
+  const dateLabel   = new Date().toLocaleDateString('fr-FR', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+  const dateCapital = dateLabel.charAt(0).toUpperCase() + dateLabel.slice(1);
+  const html = routesData.map((r, i) =>
+    `${i > 0 ? '<div style="page-break-before:always"></div>' : ''}
+     <h2>${_routeTitle(r)}</h2>
+     ${_routeToHTML(r)}`
+  ).join('');
+  _openPrintWindow(html, `Feuilles de route — ${dateCapital}`);
+}
+
 function printPrepOverview() {
-  const body = _buildOverviewHTML();
-  const css = document.querySelector('style#overview-css')?.textContent || _getOverviewCSS();
-  _openPrintWindow(body, 'Planning Journalier', css);
+  _openPrintWindow(_buildOverviewHTML(), 'Planning Journalier', _getOverviewCSS());
+}
+
+// ── Aperçu avant impression (onglet Impression) ──
+function buildPrintPreview() {
+  const host = document.getElementById('print-preview-content');
+  if (!host) return;
+
+  // Feuille de style d'impression, limitée à l'aperçu
+  let style = document.getElementById('overview-css');
+  if (!style) {
+    style = document.createElement('style');
+    style.id = 'overview-css';
+    document.head.appendChild(style);
+  }
+  style.textContent = _getPrintCSS()
+    .replace(/@page[^}]*}/g, '')
+    .replace(/(^|\})\s*([^{}@]+)\{/g, (all, brace, sel) =>
+      brace + sel.split(',').map(x => {
+        const t = x.trim();
+        return t === 'body' ? '#print-preview-wrap' : '#print-preview-wrap ' + t;
+      }).join(',') + '{');
+
+  host.innerHTML = _buildOverviewHTML();
+
+  ['missions','postes','pauses'].forEach(k => {
+    const on = document.getElementById('print-show-' + k)?.checked !== false;
+    host.querySelectorAll(`[data-ov="${k}"]`).forEach(el => { el.style.display = on ? '' : 'none'; });
+  });
 }
 
 
@@ -5003,6 +5188,7 @@ function doPrint() {
 
 window._appData = { routesData, missions, agents, regularMissions, postesData, csuData, prevVacations };
 window._appRender = function() {
+  _migrateStatutMembres();
   renderVacationJour();
   renderEquipagesTab();
   renderPersonnel();
@@ -5016,6 +5202,7 @@ window._appRender = function() {
 };
 
 const _hadSaved = loadSavedData();
+_migrateStatutMembres();
 
 renderVacationJour();
 renderEquipagesTab();
@@ -5337,12 +5524,8 @@ if (_hadSaved) {
           Membres de l'équipage
           <button class="add-btn" style="font-size:11px;padding:4px 10px" onclick="addMembreToRoute()">+ Ajouter un agent</button>
         </label>
-        <!-- Statuts spéciaux -->
-        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;align-items:center">
-          <span style="font-size:10px;color:var(--text-3)">Statut :</span>
-          <button onclick="addStatutSpecial('SPORT')" class="add-btn" style="font-size:10px;padding:2px 10px;background:rgba(251,146,60,.1);border-color:rgba(251,146,60,.3);color:#fb923c">🏃 SPORT</button>
-          <button onclick="addStatutSpecial('FE')" class="add-btn" style="font-size:10px;padding:2px 10px;background:rgba(251,146,60,.1);border-color:rgba(251,146,60,.3);color:#fb923c">📋 FE</button>
-          <button onclick="addStatutSpecial('DEPART AVANCE')" class="add-btn" style="font-size:10px;padding:2px 10px;background:rgba(251,146,60,.1);border-color:rgba(251,146,60,.3);color:#fb923c">⏰ Départ avancé</button>
+        <div style="font-size:11px;color:var(--text-2);margin-bottom:8px;line-height:1.4">
+          Chef, SPORT, FE et Départ avancé s'attribuent sur la ligne de l'agent. Recliquez un badge pour le retirer.
         </div>
         <div id="re-membres-list" style="margin-top:4px"></div>
       </div>
