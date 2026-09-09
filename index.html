@@ -562,6 +562,15 @@
   .chef-salle-label.active { background: rgba(16,185,129,.12); border-color: rgba(16,185,129,.35); }
   .chef-salle-label input[type=checkbox] { accent-color: var(--green); width: 13px; height: 13px; }
 
+  /* Badge de statut affiché sur une ligne agent, partout dans l'app */
+  .statut-badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-size: 10px; font-weight: 600; line-height: 1.5; white-space: nowrap;
+    padding: 1px 7px; border-radius: 4px; margin-left: 5px; vertical-align: middle;
+    background: rgba(251,146,60,.12); border: 1px solid rgba(251,146,60,.35); color: #fb923c;
+  }
+  .statut-badge.sm { font-size: 9px; padding: 0 5px; margin-left: 4px; }
+
   /* ── Attributs d'une ligne agent : Chef, SPORT, FE, Départ avancé ── */
   .membre-row {
     display: flex; align-items: center; gap: 8px;
@@ -1428,6 +1437,20 @@ function statutDef(k)   { return STATUTS_AGENT.find(s => s.key === k) || null; }
 function statutLabel(k) { const d = statutDef(k); return d ? d.label : (k || ''); }
 function statutIcon(k)  { const d = statutDef(k); return d ? d.icon  : '📌'; }
 
+// Badge de statut pour l'interface sombre
+function statutBadgeHTML(statut, size) {
+  if (!statut) return '';
+  return `<span class="statut-badge${size === 'sm' ? ' sm' : ''}">${statutIcon(statut)} ${statutLabel(statut)}</span>`;
+}
+
+// Certaines vues sont construites à partir de noms d'agents seuls :
+// on retrouve alors le statut dans la feuille de route de l'équipage.
+function statutDeAgent(equipId, nom) {
+  const rd = (typeof routesData !== 'undefined' && routesData) || [];
+  const r = rd.find(x => x.id === equipId);
+  return r ? ((r.membres || []).find(m => m.n === nom)?.statut || null) : null;
+}
+
 // Nettoie les anciennes données où un statut avait été saisi
 // comme un faux agent dans la liste des membres.
 function _migrateStatutMembres() {
@@ -1728,7 +1751,7 @@ function renderEquipCard(eq, forDashboard) {
     const isChef = a === eq.chef;
     return `<div class="equip-row">
       <div class="equip-row-label">${isChef ? '★ Chef' : 'Agent'}</div>
-      <div><span class="agent-name">${a}</span>${isChef ? '<span class="agent-chef">CHEF</span>' : ''}</div>
+      <div><span class="agent-name">${a}</span>${isChef ? '<span class="agent-chef">CHEF</span>' : ''}${statutBadgeHTML(statutDeAgent(eq.id, a), 'sm')}</div>
     </div>`;
   }).join('') : '<div style="font-size:12px;color:var(--text-muted);padding:8px 0">Aucun agent assigné</div>';
 
@@ -1824,7 +1847,7 @@ function renderVacationJour(targetISO) {
       const isChef = m.n === r.chef;
       return `<div class="equip-row">
         <div class="equip-row-label">${isChef ? '★ Chef' : 'Agent'}</div>
-        <div><span class="agent-name">${m.n}</span>${isChef ? '<span class="agent-chef"> CHEF</span>' : ''}</div>
+        <div><span class="agent-name">${m.n}</span>${isChef ? '<span class="agent-chef"> CHEF</span>' : ''}${statutBadgeHTML(m.statut, 'sm')}</div>
       </div>`;
     }).join('') : '<div style="font-size:12px;color:var(--text-2);padding:6px 0">Aucun agent</div>';
     return `<div class="equip-card">
@@ -2134,7 +2157,7 @@ function _renderPrepRouteCard(r, idx) {
     return `<div class="route-agent">
       <div class="agent-avatar ${isChef ? 'avatar-amber' : 'avatar-blue'}">${initials(m.n||'?')}</div>
       <div>
-        <div style="font-size:12px;font-weight:500;color:var(--text-primary)">${m.n}</div>
+        <div style="font-size:12px;font-weight:500;color:var(--text-primary)">${m.n}${statutBadgeHTML(m.statut, 'sm')}</div>
         <div style="font-size:11px;color:var(--text-muted)">Mat. ${m.m||'—'}${isChef ? ' · Chef' : ''}</div>
       </div>
     </div>`;
@@ -2340,7 +2363,7 @@ function renderEquipagesTab() {
       const isChef = m.n === r.chef;
       return `<div class="equip-row">
         <div class="equip-row-label">${isChef ? '★ Chef' : 'Agent'}</div>
-        <div><span class="agent-name">${m.n}</span>${isChef ? '<span class="agent-chef">CHEF</span>' : ''}</div>
+        <div><span class="agent-name">${m.n}</span>${isChef ? '<span class="agent-chef">CHEF</span>' : ''}${statutBadgeHTML(m.statut, 'sm')}</div>
       </div>`;
     }).join('') : '<div style="font-size:12px;color:var(--text-muted);padding:8px 0">Aucun agent assigné</div>';
     return `<div class="equip-card">
@@ -2380,7 +2403,7 @@ function renderPersonnel(filter = '') {
     const agentNom = p.nom.replace(/'/g, "\\'");
     return `
     <tr>
-      <td><strong class="editable" contenteditable="false">${p.nom}</strong>${p.chef ? ' <span class="badge badge-amber" style="font-size:10px">Chef</span>' : ''}</td>
+      <td><strong class="editable" contenteditable="false">${p.nom}</strong>${p.chef ? ' <span class="badge badge-amber" style="font-size:10px">Chef</span>' : ''}${statutBadgeHTML(p.statut, 'sm')}</td>
       <td><span class="badge badge-gray">${p.grade || 'APM'}</span></td>
       <td><span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-secondary)">${p.mat || '—'}</span></td>
       <td>${p.radio || '—'}</td>
@@ -2420,6 +2443,7 @@ function syncPersonnelFromRoutes() {
         psa: ag ? ag.psa : '',
         equip: r.id,
         chef: m.n === r.chef,
+        statut: m.statut || null,
         attr: (r.zones || []).join(', '),
         zones: r.zones || [],
         pr: r.repas || '',
@@ -3290,7 +3314,7 @@ function renderRoutes() {
       return `<div class="route-agent">
         <div class="agent-avatar ${isChef ? 'avatar-amber' : 'avatar-blue'}">${initials(m.n||'?')}</div>
         <div>
-          <div style="font-size:12px;font-weight:500;color:var(--text-primary)">${m.n}</div>
+          <div style="font-size:12px;font-weight:500;color:var(--text-primary)">${m.n}${statutBadgeHTML(m.statut, 'sm')}</div>
           <div style="font-size:11px;color:var(--text-muted)">Mat. ${m.m} ${isChef ? '· Chef' : ''}</div>
         </div>
       </div>`;
@@ -4386,7 +4410,7 @@ function viewRoute(idx) {
     return `<div class="v-membre ${isChef ? 'v-chef' : ''}">
       <div class="v-avatar">${initials(m.n||'?')}</div>
       <div class="v-membre-info">
-        <div class="v-membre-nom">${m.n}${isChef ? ' <span class="v-badge-chef">★ Chef</span>' : ''}</div>
+        <div class="v-membre-nom">${m.n}${isChef ? ' <span class="v-badge-chef">★ Chef</span>' : ''}${statutBadgeHTML(m.statut)}</div>
         <div class="v-membre-det">Mat. ${m.m || ag.mat || '—'} · Radio ${ag.radio || '—'} · Tonfa ${ag.tonfa != null ? ag.tonfa : '—'} · Lacry ${ag.lacry != null ? ag.lacry : '—'}${ag.psa ? ' · ' + ag.psa : ''}</div>
       </div>
     </div>`;
@@ -4434,6 +4458,7 @@ function viewRoute(idx) {
   .v-badge-pr { background:rgba(37,99,235,0.15); color:#93c5fd; border:1px solid rgba(37,99,235,0.3); }
   .v-badge-fourr { background:rgba(245,158,11,0.1); color:#fcd34d; border:1px solid rgba(245,158,11,0.25); }
   .v-badge-chef { background:rgba(245,158,11,0.2); color:#fcd34d; border:1px solid rgba(245,158,11,0.35); padding:2px 7px; border-radius:4px; font-size:10px; margin-left:6px; font-family:'DM Mono',monospace; }
+  .statut-badge { display:inline-flex; align-items:center; gap:3px; background:rgba(251,146,60,0.15); color:#fb923c; border:1px solid rgba(251,146,60,0.4); padding:2px 7px; border-radius:4px; font-size:10px; margin-left:6px; font-weight:600; white-space:nowrap; }
   /* Info grid */
   .v-info-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:24px; }
   .v-info-cell { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:12px 14px; backdrop-filter:blur(8px); }
