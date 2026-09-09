@@ -2711,17 +2711,19 @@ function _matchAgentToPlanning(agentNom, planningList) {
     container.innerHTML = r.membres.map((m, i) => {
       const isChef  = m.n === r.chef;
       const avail   = available.length ? _matchAgentToPlanning(m.n, available) : null;
-      const isSpecial = ['SPORT','FE','DEPART AVANCE'].includes(m.n);
+      const isSpecial = m.statut || ['SPORT','FE','DEPART AVANCE'].includes(m.n);
+      const statutLabel = m.statut || (isSpecial ? m.n : null);
+      const statutBadge = statutLabel
+        ? `<span style="font-size:10px;color:#fb923c;background:rgba(251,146,60,.1);border:1px solid rgba(251,146,60,.3);padding:1px 8px;border-radius:4px;margin-left:4px;font-weight:600">${statutLabel === 'DEPART AVANCE' ? '⏰ Départ avancé' : statutLabel === 'FE' ? '📋 FE' : '🏃 SPORT'}</span>`
+        : '';
 
       const borderColor = isSpecial ? 'rgba(251,146,60,.3)' : avail === true ? 'rgba(16,185,129,.35)' : avail === false ? 'rgba(239,68,68,.3)' : 'transparent';
       const bgColor     = isSpecial ? 'rgba(251,146,60,.05)' : avail === true ? 'rgba(16,185,129,.06)' : avail === false ? 'rgba(239,68,68,.06)' : 'rgba(255,255,255,.03)';
-      const availBadge  = isSpecial
-        ? `<span style="font-size:10px;color:#fb923c;background:rgba(251,146,60,.1);border:1px solid rgba(251,146,60,.3);padding:1px 6px;border-radius:4px;margin-left:4px">📋 ${m.n}</span>`
-        : avail === true
+      const availBadge  = statutBadge || (avail === true
         ? '<span style="font-size:10px;color:#6ee7b7;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);padding:1px 6px;border-radius:4px;margin-left:4px">✓ Présent</span>'
         : avail === false
         ? '<span style="font-size:10px;color:#fca5a5;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);padding:1px 6px;border-radius:4px;margin-left:4px">✗ Absent</span>'
-        : '';
+        : '');
 
       return `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;border-radius:8px;padding:7px 8px;border:1px solid ${borderColor};background:${bgColor}">
         <div class="agent-avatar ${isChef?'avatar-amber':'avatar-blue'}" style="flex-shrink:0;width:28px;height:28px;font-size:10px">${initials(m.n||'?')}</div>
@@ -2836,9 +2838,43 @@ function _matchAgentToPlanning(agentNom, planningList) {
   }
 
   function addStatutSpecial(statut) {
-    routesData[editingRouteIdx].membres.push({ n: statut, m: '' });
-    _cachedAgentCount = -1;
-    refreshEditMembres();
+    // Modale pour choisir l'agent à qui attribuer le statut
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay open';
+    modal.style.zIndex = '10002';
+    const agentOptions = agents.map(a =>
+      `<option value="${a.nom}">${a.nom} — mat.${a.mat||'—'}</option>`
+    ).join('');
+    const icons = { 'SPORT':'🏃', 'FE':'📋', 'DEPART AVANCE':'⏰' };
+    const icon = icons[statut] || '📌';
+    modal.innerHTML = `<div class="modal" style="width:380px;max-width:95vw">
+      <div class="modal-title">
+        <span>${icon} Attribuer le statut <strong style="color:#fb923c">${statut}</strong></span>
+        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">✕</button>
+      </div>
+      <div class="form-group" style="margin-bottom:16px">
+        <label class="form-label">Agent concerné</label>
+        <select id="statut-agent-select" class="form-select">
+          <option value="">— Sélectionner un agent —</option>
+          ${agentOptions}
+        </select>
+      </div>
+      <div class="btn-row">
+        <button class="btn-secondary" onclick="this.closest('.modal-overlay').remove()">Annuler</button>
+        <button class="btn-primary" onclick="
+          const nom = document.getElementById('statut-agent-select').value;
+          if (!nom) return;
+          const ag = window._agentsList?.find(a=>a.nom===nom);
+          routesData[editingRouteIdx].membres.push({ n: nom, m: ag?.mat||'', statut: '${statut}' });
+          _cachedAgentCount = -1;
+          refreshEditMembres();
+          this.closest('.modal-overlay').remove();
+        ">Confirmer</button>
+      </div>
+    </div>`;
+    modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
+    document.body.appendChild(modal);
+    setTimeout(() => document.getElementById('statut-agent-select')?.focus(), 80);
   }
   function addSpecMissionRow(text) {
     const list = document.getElementById('re-missions-spec-list');
@@ -6528,14 +6564,16 @@ function printPrepOverview() {
     const zones = (r.zones||[]).length
       ? `<div style="margin-top:5px;display:flex;gap:3px;flex-wrap:wrap">${r.zones.map(z=>`<span class="badge green">${z}</span>`).join('')}</div>` : '';
 
-    const specMiss = (r.missionsSpec||[]).length
-      ? `<div style="margin-top:5px;border-top:1px solid #f1f5f9;padding-top:4px">${r.missionsSpec.map(ms=>`<div style="font-size:10px;color:#475569;padding:1px 0">› ${ms}</div>`).join('')}</div>` : '';
+    const specMiss = (r.missionsSpec||[]).filter(Boolean).length
+      ? `<div style="margin-top:5px;padding:4px 6px;background:#fef9c3;border-left:2px solid #eab308;border-radius:3px">
+          ${r.missionsSpec.filter(Boolean).map(ms=>`<div style="font-size:10px;color:#854d0e;padding:1px 0">⚡ ${ms}</div>`).join('')}
+         </div>` : '';
 
     const phoneBar = phone
-      ? `<div style="margin-top:4px;font-size:10px;color:#059669;font-weight:600">📱 ${phone.num}</div>` : '';
+      ? `<div style="margin-top:4px;padding:3px 6px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:4px;font-size:10px;color:#059669;font-weight:700">📱 ${phone.label} — ${phone.num}</div>` : '';
 
     const consigneHTML = r.consignes
-      ? `<div style="margin-top:5px;border-top:1px solid #f1f5f9;padding-top:4px;font-size:10px;color:#374151;font-style:italic">${r.consignes.replace(/\n/g,'<br>')}</div>` : '';
+      ? `<div style="margin-top:5px;padding:3px 6px;background:#f8fafc;border-left:2px solid #94a3b8;border-radius:3px;font-size:10px;color:#374151;font-style:italic">${r.consignes.replace(/\n/g,'<br>')}</div>` : '';
 
     return `<div class="equip-card">
       <div class="equip-header">
@@ -7110,11 +7148,11 @@ if (_hadSaved) {
           <button class="add-btn" style="font-size:11px;padding:4px 10px" onclick="addMembreToRoute()">+ Ajouter un agent</button>
         </label>
         <!-- Statuts spéciaux -->
-        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">
-          <span style="font-size:10px;color:var(--text-3);align-self:center">Statut :</span>
-          <button onclick="addStatutSpecial('SPORT')" class="add-btn" style="font-size:10px;padding:2px 8px;background:rgba(251,146,60,.1);border-color:rgba(251,146,60,.3);color:#fb923c">🏃 SPORT</button>
-          <button onclick="addStatutSpecial('FE')" class="add-btn" style="font-size:10px;padding:2px 8px;background:rgba(251,146,60,.1);border-color:rgba(251,146,60,.3);color:#fb923c">📋 FE</button>
-          <button onclick="addStatutSpecial('DEPART AVANCE')" class="add-btn" style="font-size:10px;padding:2px 8px;background:rgba(251,146,60,.1);border-color:rgba(251,146,60,.3);color:#fb923c">⏰ Départ avancé</button>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;align-items:center">
+          <span style="font-size:10px;color:var(--text-3)">Statut :</span>
+          <button onclick="addStatutSpecial('SPORT')" class="add-btn" style="font-size:10px;padding:2px 10px;background:rgba(251,146,60,.1);border-color:rgba(251,146,60,.3);color:#fb923c">🏃 SPORT</button>
+          <button onclick="addStatutSpecial('FE')" class="add-btn" style="font-size:10px;padding:2px 10px;background:rgba(251,146,60,.1);border-color:rgba(251,146,60,.3);color:#fb923c">📋 FE</button>
+          <button onclick="addStatutSpecial('DEPART AVANCE')" class="add-btn" style="font-size:10px;padding:2px 10px;background:rgba(251,146,60,.1);border-color:rgba(251,146,60,.3);color:#fb923c">⏰ Départ avancé</button>
         </div>
         <div id="re-membres-list" style="margin-top:4px"></div>
       </div>
