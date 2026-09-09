@@ -1468,6 +1468,453 @@ function _migrateStatutMembres() {
 }
 
 // ════════════════════════════════════════════
+//  DONNÉES PARTAGÉES
+//  Déclarées ici pour que l'application fonctionne
+//  seule. Si config.js les fournit déjà, ses valeurs
+//  sont conservées.
+// ════════════════════════════════════════════
+var postesData    = window.postesData    || { accueil: [], csu: [], chefposte: [] };
+var csuData       = window.csuData       || { verbali: [], sections: [], notes: '' };
+var prevVacations = window.prevVacations || [];
+
+if (!csuData.verbali)  csuData.verbali  = [];
+if (!csuData.sections) csuData.sections = [];
+if (typeof csuData.notes !== 'string') csuData.notes = '';
+
+// ════════════════════════════════════════════
+//  POSTES FIXES — Accueil / CSU / Chef de Poste
+// ════════════════════════════════════════════
+const POSTE_TYPES = [
+  { key:'accueil',   label:'🏠 Accueil',       color:'#a78bfa', listId:'accueil-agents-list' },
+  { key:'csu',       label:'📡 CSU',            color:'#34d399', listId:'csu-agents-list' },
+  { key:'chefposte', label:'⭐ Chef de Poste',  color:'#f87171', listId:'chefposte-agents-list' },
+];
+
+function renderPosteTab(key) {
+  const t = POSTE_TYPES.find(x => x.key === key);
+  if (!t) return;
+  const host = document.getElementById(t.listId);
+  if (!host) return;
+
+  if (!postesData[key]) postesData[key] = [];
+  const list = postesData[key];
+
+  if (!list.length) {
+    host.innerHTML = `<div style="font-size:12px;color:var(--text-2);padding:10px 2px">
+      Aucun agent affecté. ${editMode ? 'Utilisez le bouton ci-dessous.' : 'Connectez-vous pour en ajouter.'}
+    </div>`;
+    return;
+  }
+
+  host.innerHTML = list.map((e, i) => {
+    const avatar = `<div class="post-agent-avatar" style="background:${t.color}22;color:${t.color}">${initials(e.nom || '?')}</div>`;
+
+    if (!editMode) {
+      const pr = PAUSES_REPAS.find(p => p.id === e.repas);
+      return `<div class="post-agent-row">
+        ${avatar}
+        <span style="font-size:13px;font-weight:${e.chefSalle ? '600' : '400'};color:${e.chefSalle ? t.color : 'var(--text-1)'}">
+          ${e.nom || '—'}${e.chefSalle ? ' ★ Chef de salle' : ''}
+        </span>
+        ${pr ? `<span class="badge badge-gray" style="font-size:10px;margin-left:auto">${pr.id} — ${pr.midi}</span>` : ''}
+      </div>`;
+    }
+
+    const agentOpts = ['<option value="">— Agent —</option>',
+      ...agents.map(a => `<option value="${a.nom}" ${a.nom === e.nom ? 'selected' : ''}>${a.nom}</option>`)].join('');
+    const repasOpts = ['<option value="">— Repas —</option>',
+      ...PAUSES_REPAS.map(p => `<option value="${p.id}" ${p.id === e.repas ? 'selected' : ''}>${p.label || (p.id + ' — ' + p.midi)}</option>`)].join('');
+
+    return `<div class="post-agent-row">
+      ${avatar}
+      <select class="post-select" onchange="updatePostAgent('${key}',${i},'nom',this.value)">${agentOpts}</select>
+      <select class="post-repas-select" onchange="updatePostAgent('${key}',${i},'repas',this.value)">${repasOpts}</select>
+      <label class="chef-salle-label ${e.chefSalle ? 'active' : ''}">
+        <input type="checkbox" ${e.chefSalle ? 'checked' : ''} onchange="updatePostAgent('${key}',${i},'chefSalle',this.checked)"> Chef de salle
+      </label>
+      <button class="post-remove-btn" title="Retirer cet agent du poste" onclick="removePostAgent('${key}',${i})">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function renderAllPosteTabs() {
+  POSTE_TYPES.forEach(t => renderPosteTab(t.key));
+}
+
+function _refreshPostes() {
+  renderAllPosteTabs();
+  if (typeof renderPrepPostes === 'function') renderPrepPostes();
+  if (typeof renderCsuRoadmap === 'function') renderCsuRoadmap();
+}
+
+function addPostAgent(key) {
+  if (!editMode) { alertLock(); return; }
+  if (!postesData[key]) postesData[key] = [];
+  postesData[key].push({ nom: agents[0]?.nom || '', repas: '', chefSalle: false });
+  saveData();
+  _refreshPostes();
+}
+
+function removePostAgent(key, idx) {
+  if (!editMode) { alertLock(); return; }
+  if (!postesData[key]) return;
+  const nom = postesData[key][idx]?.nom || '';
+  postesData[key].splice(idx, 1);
+  logAction('suppression', `Poste ${key}`, nom || '—');
+  saveData();
+  _refreshPostes();
+}
+
+function updatePostAgent(key, idx, champ, val) {
+  if (!editMode) return;
+  const e = postesData[key]?.[idx];
+  if (!e) return;
+  e[champ] = champ === 'chefSalle' ? !!val : val;
+  saveData();
+  _refreshPostes();
+}
+
+// ════════════════════════════════════════════
+//  FEUILLE DE ROUTE CSU
+// ════════════════════════════════════════════
+function renderCsuRoadmap() {
+  // Agents en poste au CSU
+  const agentsHost = document.getElementById('csu-roadmap-agents');
+  if (agentsHost) {
+    const list = (postesData.csu || []).filter(e => e.nom);
+    agentsHost.innerHTML = list.length
+      ? list.map(e => {
+          const pr = PAUSES_REPAS.find(p => p.id === e.repas);
+          return `<span class="badge badge-green" style="font-size:12px;padding:5px 11px">
+            ${e.nom}${e.chefSalle ? ' ★' : ''}${pr ? ' · ' + pr.id : ''}
+          </span>`;
+        }).join('')
+      : '<span style="font-size:12px;color:var(--text-2)">Aucun agent affecté — voir l\'onglet CSU</span>';
+  }
+
+  // Vidéo verbalisation
+  _renderCsuTaskList('csu-verbali-list', csuData.verbali, 'verbali', null, 'Aucun constat enregistré');
+  const prog = document.getElementById('csu-verbali-progress');
+  if (prog) {
+    const done = csuData.verbali.filter(t => t.done).length;
+    prog.innerHTML = csuData.verbali.length
+      ? `<span class="badge ${done === csuData.verbali.length ? 'badge-green' : 'badge-gray'}" style="font-size:11px">${done}/${csuData.verbali.length}</span>`
+      : '';
+  }
+
+  // Sections personnalisées
+  const custom = document.getElementById('csu-custom-sections');
+  if (custom) {
+    custom.innerHTML = csuData.sections.map((sec, si) => {
+      const done = (sec.taches || []).filter(t => t.done).length;
+      return `<div class="post-section" style="border-color:rgba(52,211,153,0.2);margin-bottom:12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+          <div class="post-title" style="color:#34d399;margin-bottom:0">📋 ${sec.titre}</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            ${(sec.taches || []).length ? `<span class="badge ${done === sec.taches.length ? 'badge-green' : 'badge-gray'}" style="font-size:11px">${done}/${sec.taches.length}</span>` : ''}
+            ${editMode ? `<button class="post-remove-btn" title="Supprimer la section" onclick="removeCsuSection(${si})">✕</button>` : ''}
+          </div>
+        </div>
+        <div id="csu-section-${si}"></div>
+        ${editMode ? `<button class="post-add-btn" style="border-color:rgba(52,211,153,0.4);color:#34d399;margin-top:8px" onclick="addCsuTask(${si})">+ Ajouter une tâche</button>` : ''}
+      </div>`;
+    }).join('');
+    csuData.sections.forEach((sec, si) =>
+      _renderCsuTaskList(`csu-section-${si}`, sec.taches || [], 'section', si, 'Aucune tâche'));
+  }
+
+  // Notes
+  const ta = document.getElementById('csu-notes-textarea');
+  if (ta && ta.value !== csuData.notes) ta.value = csuData.notes;
+}
+
+function _renderCsuTaskList(hostId, taches, scope, si, vide) {
+  const host = document.getElementById(hostId);
+  if (!host) return;
+  if (!taches.length) {
+    host.innerHTML = `<div style="font-size:12px;color:var(--text-2);padding:8px 2px">${vide}</div>`;
+    return;
+  }
+  host.innerHTML = taches.map((t, i) => `<div class="post-agent-row" style="padding:8px 11px;background:${t.done ? 'rgba(52,211,153,.06)' : 'rgba(255,255,255,.02)'};border-color:${t.done ? 'rgba(52,211,153,.25)' : 'var(--border)'}">
+    <input type="checkbox" ${t.done ? 'checked' : ''} style="accent-color:#34d399;width:15px;height:15px;flex-shrink:0;cursor:pointer"
+      onchange="toggleCsuTask('${scope}',${si === null ? 'null' : si},${i},this.checked)">
+    <span style="flex:1;font-size:13px;color:${t.done ? 'var(--text-2)' : 'var(--text-1)'};text-decoration:${t.done ? 'line-through' : 'none'}">${t.label}</span>
+    ${editMode ? `<button class="post-remove-btn" title="Supprimer" onclick="removeCsuTask('${scope}',${si === null ? 'null' : si},${i})">✕</button>` : ''}
+  </div>`).join('');
+}
+
+function _csuList(scope, si) {
+  return scope === 'verbali' ? csuData.verbali : (csuData.sections[si]?.taches || []);
+}
+
+function toggleCsuTask(scope, si, i, done) {
+  const list = _csuList(scope, si);
+  if (!list[i]) return;
+  list[i].done = !!done;
+  saveData();
+  renderCsuRoadmap();
+}
+
+function removeCsuTask(scope, si, i) {
+  if (!editMode) { alertLock(); return; }
+  _csuList(scope, si).splice(i, 1);
+  saveData();
+  renderCsuRoadmap();
+}
+
+function addCsuVerbaliTask() {
+  if (!editMode) { alertLock(); return; }
+  const label = prompt('Constat ou lieu à ajouter :');
+  if (!label || !label.trim()) return;
+  csuData.verbali.push({ label: label.trim(), done: false });
+  saveData();
+  renderCsuRoadmap();
+}
+
+function addCsuTask(si) {
+  if (!editMode) { alertLock(); return; }
+  const sec = csuData.sections[si];
+  if (!sec) return;
+  const label = prompt(`Tâche à ajouter dans « ${sec.titre} » :`);
+  if (!label || !label.trim()) return;
+  if (!sec.taches) sec.taches = [];
+  sec.taches.push({ label: label.trim(), done: false });
+  saveData();
+  renderCsuRoadmap();
+}
+
+function openAddCsuMission() {
+  if (!editMode) { alertLock(); return; }
+  const titre = prompt('Nom de la nouvelle section :');
+  if (!titre || !titre.trim()) return;
+  csuData.sections.push({ titre: titre.trim(), taches: [] });
+  logAction('ajout', 'Section CSU', titre.trim());
+  saveData();
+  renderCsuRoadmap();
+}
+
+function removeCsuSection(si) {
+  if (!editMode) { alertLock(); return; }
+  const sec = csuData.sections[si];
+  if (!sec) return;
+  if (!confirm(`Supprimer la section « ${sec.titre} » et ses tâches ?`)) return;
+  csuData.sections.splice(si, 1);
+  logAction('suppression', 'Section CSU', sec.titre);
+  saveData();
+  renderCsuRoadmap();
+}
+
+function resetCsuChecks() {
+  if (!editMode) { alertLock(); return; }
+  if (!confirm('Décocher toutes les cases de la feuille de route CSU ?')) return;
+  csuData.verbali.forEach(t => { t.done = false; });
+  csuData.sections.forEach(s => (s.taches || []).forEach(t => { t.done = false; }));
+  saveData();
+  renderCsuRoadmap();
+}
+
+// Appelé à chaque frappe dans les notes : on enregistre sans redessiner,
+// sinon le curseur saute.
+function saveCsuData() {
+  const ta = document.getElementById('csu-notes-textarea');
+  if (ta) csuData.notes = ta.value;
+  saveData();
+}
+
+// ════════════════════════════════════════════
+//  STATISTIQUES AGENTS
+// ════════════════════════════════════════════
+function _statsCategorie(equipId) {
+  const id = (equipId || '').toUpperCase();
+  if (id.includes('VTT'))    return 'vtt';
+  if (id.includes('SCOOT'))  return 'scooter';
+  if (id.includes('ILOT') || id.includes('ÎLOT')) return 'ilots';
+  if (id.includes('TV'))     return 'tv';
+  return 'tv';
+}
+
+function _statsVacations() {
+  const sel  = document.getElementById('stats-period')?.value || 'all';
+  const jours = sel === 'all' ? null : parseInt(sel, 10);
+  const limite = jours ? Date.now() - jours * 86400000 : null;
+
+  return (prevVacations || []).filter(v => {
+    if (!limite) return true;
+    const d = v.dateStr || v.date || '';
+    const p = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    const dt = p ? new Date(+p[3], +p[2] - 1, +p[1]) : new Date(d);
+    return !isNaN(dt) && dt.getTime() >= limite;
+  });
+}
+
+function _statsCompute() {
+  const parAgent = {};
+  const binomes  = {};
+  const get = nom => parAgent[nom] || (parAgent[nom] = {
+    nom, vacations: 0, tv: 0, vtt: 0, scooter: 0, ilots: 0,
+    accueil: 0, csu: 0, chefposte: 0, chefEquip: 0,
+  });
+
+  _statsVacations().forEach(v => {
+    const vus = new Set();
+
+    (v.routes || []).forEach(r => {
+      const cat  = _statsCategorie(r.id);
+      const noms = (r.membres || []).map(m => m.n).filter(Boolean);
+      noms.forEach(n => {
+        const s = get(n);
+        s[cat]++;
+        if (n === r.chef) s.chefEquip++;
+        vus.add(n);
+        // binômes : les autres membres du même équipage
+        if (!binomes[n]) binomes[n] = {};
+        noms.filter(o => o !== n).forEach(o => { binomes[n][o] = (binomes[n][o] || 0) + 1; });
+      });
+    });
+
+    ['accueil', 'csu', 'chefposte'].forEach(k => {
+      ((v.postes || {})[k] || []).forEach(e => {
+        if (!e.nom) return;
+        get(e.nom)[k]++;
+        vus.add(e.nom);
+      });
+    });
+
+    vus.forEach(n => { get(n).vacations++; });
+  });
+
+  return { parAgent, binomes, nbVacations: _statsVacations().length };
+}
+
+function renderStats() {
+  const tbody = document.getElementById('stats-tbody');
+  if (!tbody) return;
+
+  const { parAgent, binomes, nbVacations } = _statsCompute();
+  const filtre = (document.getElementById('stats-agent-search')?.value || '').trim().toLowerCase();
+  const lignes = Object.values(parAgent)
+    .filter(s => !filtre || s.nom.toLowerCase().includes(filtre))
+    .sort((a, b) => b.vacations - a.vacations || a.nom.localeCompare(b.nom));
+
+  // Résumé
+  const global = document.getElementById('stats-global');
+  if (global) {
+    const tot = Object.values(parAgent);
+    const cartes = [
+      { label: 'Vacations analysées', val: nbVacations,                              color: 'var(--cyan)' },
+      { label: 'Agents recensés',     val: tot.length,                                color: '#93c5fd' },
+      { label: 'Chefs d\'équipage',   val: tot.filter(s => s.chefEquip > 0).length,   color: 'var(--amber)' },
+      { label: 'Passages en poste',   val: tot.reduce((n, s) => n + s.accueil + s.csu + s.chefposte, 0), color: 'var(--green)' },
+    ];
+    global.innerHTML = cartes.map(c => `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px">
+      <div style="font-size:10px;color:var(--text-2);margin-bottom:3px">${c.label}</div>
+      <div style="font-size:20px;font-weight:700;color:${c.color};font-family:'Syne',sans-serif">${c.val}</div>
+    </div>`).join('');
+  }
+
+  if (!lignes.length) {
+    tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--text-2);padding:24px;font-size:13px">
+      ${nbVacations ? 'Aucun agent ne correspond au filtre.' : 'Aucune vacation enregistrée sur la période — les statistiques se remplissent au fil des enregistrements.'}
+    </td></tr>`;
+    return;
+  }
+
+  const cell = n => `<td style="text-align:center;color:${n ? 'var(--text-1)' : 'var(--text-3)'}">${n || '—'}</td>`;
+  tbody.innerHTML = lignes.map(s => `<tr>
+    <td><strong>${s.nom}</strong></td>
+    ${cell(s.vacations)}${cell(s.tv)}${cell(s.vtt)}${cell(s.scooter)}${cell(s.ilots)}
+    ${cell(s.accueil)}${cell(s.csu)}${cell(s.chefposte)}
+    <td style="text-align:center;color:${s.chefEquip ? 'var(--amber)' : 'var(--text-3)'};font-weight:${s.chefEquip ? '600' : '400'}">${s.chefEquip || '—'}</td>
+    <td style="text-align:center">
+      <button class="post-remove-btn" style="background:rgba(6,182,212,.08);border-color:rgba(6,182,212,.25);color:#67e8f9"
+        onclick="showStatsBinomes('${s.nom.replace(/'/g, "\\'")}')">👥 Voir</button>
+    </td>
+  </tr>`).join('');
+
+  window._statsBinomes = binomes;
+}
+
+function showStatsBinomes(nom) {
+  const host = document.getElementById('stats-agent-detail');
+  if (!host) return;
+  const b = (window._statsBinomes || {})[nom] || {};
+  const paires = Object.entries(b).sort((x, y) => y[1] - x[1]);
+
+  host.style.display = 'block';
+  host.innerHTML = `<div class="post-section" style="margin-bottom:0">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">
+      <div class="post-title" style="margin-bottom:0">👥 Binômes de ${nom}</div>
+      <button class="post-remove-btn" onclick="document.getElementById('stats-agent-detail').style.display='none'">✕</button>
+    </div>
+    ${paires.length
+      ? `<div style="display:flex;gap:6px;flex-wrap:wrap">${paires.map(([o, n]) =>
+          `<span class="badge badge-blue" style="font-size:12px;padding:5px 11px">${o} <strong style="margin-left:4px">${n}×</strong></span>`).join('')}</div>`
+      : '<div style="font-size:12px;color:var(--text-2)">Aucun équipage partagé sur la période.</div>'}
+  </div>`;
+  host.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ════════════════════════════════════════════
+//  VUE MOBILE
+// ════════════════════════════════════════════
+function openMobileView() {
+  const todayKey = normDate(new Date());
+  const vac = (prevVacations || []).find(v => normDate(v.dateStr || v.date || '') === todayKey);
+  const routes = vac?.routes || routesData;
+  const postes = vac?.postes || postesData;
+
+  const dateLabel = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  const equipages = routes.filter(r => (r.membres || []).length).map(r => {
+    const pr = PAUSES_REPAS.find(p => p.id === r.repas);
+    return `<section>
+      <h2>${r.id}${r.role ? ` <em>${r.role}</em>` : ''}${pr ? ` <em>${pr.id}</em>` : ''}</h2>
+      ${r.membres.map(m => `<div class="ag${m.n === r.chef ? ' chef' : ''}">
+        <span>${m.n}${m.n === r.chef ? ' ★' : ''}</span>
+        ${m.statut ? `<b>${statutIcon(m.statut)} ${statutLabel(m.statut)}</b>` : ''}
+      </div>`).join('')}
+      ${(r.zones || []).length ? `<p>${r.zones.join(' · ')}</p>` : ''}
+      ${r.consignes ? `<p class="cons">${r.consignes.replace(/\n/g, '<br>')}</p>` : ''}
+    </section>`;
+  }).join('') || '<section><p>Aucun équipage enregistré pour aujourd\'hui.</p></section>';
+
+  const postesHTML = POSTE_TYPES.map(t => {
+    const list = (postes[t.key] || []).filter(e => e.nom);
+    if (!list.length) return '';
+    return `<section><h2>${t.label}</h2>${list.map(e =>
+      `<div class="ag"><span>${e.nom}${e.chefSalle ? ' ★' : ''}</span>${e.repas ? `<b>${e.repas}</b>` : ''}</div>`).join('')}</section>`;
+  }).filter(Boolean).join('');
+
+  const css = `
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:#0d1117;color:#e6edf3;font-family:'Inter',-apple-system,Segoe UI,sans-serif;font-size:15px;padding:14px;line-height:1.5}
+    header{border-bottom:2px solid #2563eb;padding-bottom:10px;margin-bottom:14px}
+    h1{font-size:18px;font-weight:700}
+    header p{font-size:13px;color:#8b949e;margin-top:2px}
+    section{background:#161b22;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+    h2{font-size:15px;color:#93c5fd;margin-bottom:8px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+    h2 em{font-style:normal;font-size:11px;background:rgba(245,158,11,.12);color:#fcd34d;border:1px solid rgba(245,158,11,.3);padding:1px 7px;border-radius:4px}
+    .ag{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+    .ag:last-child{border-bottom:0}
+    .ag.chef span{color:#fcd34d;font-weight:600}
+    .ag b{font-size:11px;font-weight:600;background:rgba(251,146,60,.14);color:#fb923c;border:1px solid rgba(251,146,60,.35);padding:2px 8px;border-radius:4px;white-space:nowrap}
+    p{font-size:13px;color:#8b949e;margin-top:8px}
+    p.cons{border-left:2px solid rgba(255,255,255,.16);padding-left:9px;font-style:italic}
+  `;
+
+  const win = window.open('', '_blank', 'width=430,height=900');
+  if (!win) { alert('Ouverture bloquée. Autorisez les fenêtres pop-up pour ce site.'); return; }
+  win.document.open();
+  win.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Vue mobile — ${dateLabel}</title><style>${css}</style></head><body>
+    <header><h1>Planning Journalier</h1><p>${dateLabel.charAt(0).toUpperCase() + dateLabel.slice(1)}</p></header>
+    ${equipages}${postesHTML}</body></html>`);
+  win.document.close();
+  win.focus();
+}
+
+// ════════════════════════════════════════════
 //  DATA
 // ════════════════════════════════════════════
 
